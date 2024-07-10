@@ -12,7 +12,7 @@ Some toy examples to build from when starting new projects.
 # Self-supervised training of a simple MLP to >90% linear probe accuracy on MNIST with DINO
 python3 -m examples.train_dino \
     --device mps \
-    --epochs 64 \ # 10 epochs should be enough; 64 is purely for making a cool GIF
+    --epochs 16 \
     --batch_size 16 \
     --t_teacher 0.01 \
     --ema_decay_teacher 0.998 \
@@ -24,4 +24,3 @@ python3 -m examples.train_dino \
     --lr_warmup 10 \
     --anneal_momentum False
 ```
-# aloe

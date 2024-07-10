@@ -78,43 +78,6 @@ class Projector(nn.Module):
         return self.head(x)
 
 
-class KoLeoLoss(nn.Module):
-    """A regularization on the structure of the embeddings
-
-    Reference
-    ---------
-    1. "Spreading vectors for similarity search". Sablayrolles et al (2018).
-    """
-
-    def __init__(self):
-        super().__init__()
-        self.pdist = nn.PairwiseDistance(2, eps=1e-8)
-
-    def pairwise_nearest_neighbours(self, x):
-        dots = torch.mm(x, x.t())
-        n = x.shape[0]
-        dots.view(-1)[:: (n + 1)].fill_(-1)
-        _, index = torch.max(dots, dim=1)
-        return index
-
-    def forward(self, student_embeddings: Tensor, eps: float = 1e-8):
-        student_embeddings = student_embeddings.flatten(1)
-
-        student_embeddings = F.normalize(
-            student_embeddings,
-            eps=eps,
-            p=2,
-            dim=-1
-        )
-
-        index = self.pairwise_nearest_neighbours(student_embeddings)
-        distances = self.pdist(
-            student_embeddings[index],
-            student_embeddings[index]
-        )
-
-        return -torch.log(distances + eps).mean()
-
 
 class DINO(nn.Module):
     """Self-supervised training with distillation with no labels
@@ -228,8 +191,6 @@ class DINO(nn.Module):
                 (self.h, self.w),
                 scale=crop_global_scales
             )
-
-        self.koleo_loss = KoLeoLoss()
 
     @torch.no_grad()
     def forward_ema(self, beta: float) -> None:
@@ -357,10 +318,7 @@ class DINO(nn.Module):
             p2_student=p2_student
         )
 
-        #koleo_s1 = self.koleo_loss(s1)
-        #koleo_s2 = self.koleo_loss(s2)
-
-        return loss #+ 0.1 * (koleo_s1 + koleo_s2)
+        return loss
 
 
 class DINOTrainer:

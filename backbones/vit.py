@@ -5,7 +5,7 @@ from typing import Union
 
 
 class ViT(nn.Module):
-    """Vision transformer with multi-head self-attention
+    """Vision transformer with multi-head self-attention and registers
 
     Parameters
     ----------
@@ -36,23 +36,28 @@ class ViT(nn.Module):
 
     References
     ----------
-    1. github.com/lucidrains/vit-pytorch/blob/main/vit_pytorch/vit.py
+    1. "An Image is Worth 16x16 Words: Transformers for Image Recognition
+       at Scale". Dosovitskiy et al. (2020). https://arxiv.org/abs/2010.11929
+    2. "Vision Transformers need Registers". Darcet et al. (2024).
+       https://arxiv.org/pdf/2309.16588
+    3. github.com/lucidrains/vit-pytorch/blob/main/vit_pytorch/vit.py
     """
 
     def __init__(
         self,
-        image_size: Union[int, tuple],
-        patch_size: Union[int, tuple],
-        n_classes: int,
-        dim: int,
-        depth: int,
-        heads: int,
-        mlp_dim: int,
-        pool: str = 'cls',
+        image_size: Union[int, tuple] = 224,
+        patch_size: Union[int, tuple] = 16,
+        n_classes: int = 1000,
+        dim: int = 768,
+        depth: int = 12,
+        heads: int = 8,
+        mlp_dim: int = 512,
+        pool: str = 'mean',
         channels: int = 3,
         dim_head: int = 64,
         dropout: float = 0.,
-        emb_dropout: float = 0.
+        emb_dropout: float = 0.,
+        n_registers: int = 8,
     ):
         super().__init__()
         if isinstance(image_size, int):
@@ -95,6 +100,9 @@ class ViT(nn.Module):
         self.cls_token = nn.Parameter(torch.randn(1, 1, dim))
         self.dropout = nn.Dropout(emb_dropout)
 
+        self.n_registers = n_registers
+        self.register_tokens = nn.Parameter(torch.randn(n_registers, dim))
+
         self.transformer = Transformer(
             dim,
             depth,
@@ -119,12 +127,18 @@ class ViT(nn.Module):
         x = x.reshape(b, ph * pw, p1 * p2 * c)
 
         x = self.to_patch_embedding(x)
+
         cls_tokens = self.cls_token.expand(b, -1, -1)
         x = torch.cat((cls_tokens, x), dim=1)
-        x += self.pos_embedding[:, :(ph * pw + 1)]
 
+        x += self.pos_embedding[:, :(ph * pw + 1)]
         x = self.dropout(x)
+
+        r = self.register_tokens.expand(b, -1, -1)
+
+        x = torch.cat((r, x), dim=1)
         x = self.transformer(x)
+        x = x[:, self.n_registers:, :]
 
         x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
 
@@ -240,3 +254,30 @@ class Transformer(nn.Module):
             x = ff(x) + x
 
         return x
+
+
+if __name__ == "__main__":
+    prefix = "[INFO | vit ]"
+
+    print(f"{prefix} Checking ViT forward pass.")
+
+    model = ViT(
+        image_size=224,
+        channels=3,
+        patch_size=32,
+        n_classes=4321,
+        dim=1234,
+        n_registers=7,
+    )
+
+    x = torch.randn(1, 3, 224, 224)
+
+    embed = model.forward_embed(x)
+    assert embed.shape == (1, 1234), \
+        f"{prefix} Embed failed. Shape is {embed.shape}"
+
+    out = model(x)
+    assert out.shape == (1, 4321), \
+        f"{prefix} Head failed. Shape is {out.shape}"
+
+    print(f"{prefix} Basic ViT checks passed.")

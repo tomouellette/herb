@@ -1,4 +1,4 @@
-## aloe
+# :herb: herb
 
 A rough collection of personal scripts, utilities, and implementations for experimenting, building, and training neural networks. Most things setup for toying around in the single CPU/GPU setting.
 

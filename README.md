@@ -11,16 +11,32 @@ Some toy examples to build from when starting new projects.
 ```python3
 # Self-supervised training of a simple MLP to >90% linear probe accuracy on MNIST with DINO
 python3 -m examples.train_dino \
-    --device mps \
-    --epochs 16 \
-    --batch_size 16 \
-    --t_teacher 0.01 \
-    --ema_decay_teacher 0.998 \
-    --crop_local_scales 0.7 1.0 \
+    --image_size 28 \
+    --channels 1 \
+    --projector_hidden_dim 256 \
+    --projector_k 4096 \
+    --projector_layers 4 \
     --projector_batch_norm True \
-    --freeze_projector 1 \
-    --lr_max 0.0001 \
+    --projector_l2_norm True \
+    --t_teacher 0.04 \
+    --t_student 0.9 \
+    --crop_local_scales 0.9 1.0 \
+    --crop_global_scales 0.9 1.0 \
+    --ema_decay_teacher 0.99 \
+    --ema_decay_center 0.9 \
+    --batch_size 64 \
+    --epochs 11 \
+    --lr_max 0.0005 \
     --lr_min 0.000001 \
-    --lr_warmup 10 \
-    --anneal_momentum False
+    --lr_warmup 1 \
+    --weight_decay_start 0.04 \
+    --weight_decay_end 0.4 \
+    --clip_grad 0. \
+    --freeze_projector 1 \
+    --anneal_momentum True \
+    --seed 123456 \
+    --t_teacher_final 0.04 \
+    --t_teacher_warmup 0.02 \
+    --t_teacher_warmup_epochs 10 \
+    --device mps
 ```

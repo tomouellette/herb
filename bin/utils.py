@@ -109,7 +109,7 @@ def generate_gif(ordered_image_paths: list, output: str) -> None:
     for filename in ordered_image_paths:
         images.append(imageio.v3.imread(filename))
 
-    for _ in range(5):
+    for _ in range(20):
         images.append(imageio.v3.imread(ordered_image_paths[-1]))
 
     imageio.v3.imwrite(

@@ -20,6 +20,6 @@ class Randomize(nn.Module):
 def basic_augment() -> Callable:
     return torch.nn.Sequential(
         Randomize(T.ColorJitter(0.8, 0.8, 0.8, 0.2), p=0.3),
-        Randomize(T.RandomRotation(degrees=(-30, 30)), p=0.3),
+        Randomize(T.RandomRotation(degrees=(-60, 60)), p=0.3),
         Randomize(T.GaussianBlur((3, 3), (1.0, 2.0)), p=0.3),
     )

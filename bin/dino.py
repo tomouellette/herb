@@ -248,8 +248,8 @@ class DINO(nn.Module):
         p1_student = F.log_softmax(p1_student + 1e-20, dim=-1)
         p2_student = F.log_softmax(p2_student + 1e-20, dim=-1)
 
-        l1 = - (p1_teacher * p2_student).sum(dim=-1).mean()
-        l2 = - (p2_teacher * p1_student).sum(dim=-1).mean()
+        l1 = -(p1_teacher * p2_student).sum(dim=-1).mean()
+        l2 = -(p2_teacher * p1_student).sum(dim=-1).mean()
 
         return (l1 + l2) / 2
 

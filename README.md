@@ -1,42 +1,33 @@
 # :herb: herb
 
-A rough collection of personal scripts, utilities, and implementations for experimenting, building, and training neural networks. Most things setup for toying around in the single CPU/GPU setting.
+A rough collection of personal scripts, utilities, and implementations for experimenting, building, and training neural networks. Tired of abstraction bloat? Backbones and models are all self-contained in single files.
 
-### Examples
-
-Some toy examples to build from when starting new projects.
-
-#### DINO
+### DINO
 
 ```python3
-# Self-supervised training of a simple MLP to >90% linear probe accuracy on MNIST with DINO
-python3 -m examples.train_dino \
+python3 -m models.dino \
+    --image_folder '/Users/tomouellette/Home/submissions/fqmv-paper/temp/process/cells-almeida/' \
     --image_size 28 \
     --channels 1 \
+    --epochs 10 \
+    --batch_size 256 \
+    --max_lr 1e-4 \
+    --min_lr 1e-6 \
+    --lr_warmup_fraction 0.1 \
     --projector_hidden_dim 256 \
-    --projector_k 4096 \
+    --projector_k 256 \
     --projector_layers 4 \
-    --projector_batch_norm True \
+    --projector_batch_norm False \
     --projector_l2_norm True \
-    --t_teacher 0.04 \
-    --t_student 0.9 \
-    --crop_local_scales 0.9 1.0 \
-    --crop_global_scales 0.9 1.0 \
-    --ema_decay_teacher 0.99 \
-    --ema_decay_center 0.9 \
-    --batch_size 64 \
-    --epochs 11 \
-    --lr_max 0.0005 \
-    --lr_min 0.000001 \
-    --lr_warmup 1 \
-    --weight_decay_start 0.04 \
-    --weight_decay_end 0.4 \
-    --clip_grad 0. \
-    --freeze_projector 1 \
-    --anneal_momentum True \
-    --seed 123456 \
-    --t_teacher_final 0.04 \
-    --t_teacher_warmup 0.02 \
-    --t_teacher_warmup_epochs 10 \
-    --device mps
+    --momentum_center 0.9 \
+    --momentum_teacher 0.996 \
+    --global_crops_scale 0.5 1.0 \
+    --local_crops_scale 0.3 0.7 \
+    --n_augments 4 \
+    --t_teacher_start 0.04 \
+    --t_teacher_end 0.02 \
+    --t_teacher_warmup_fraction 0.1 \
+    --t_student 0.1 \
+    --silent False \
+    --test True
 ```

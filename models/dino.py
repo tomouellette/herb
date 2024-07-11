@@ -35,7 +35,10 @@ from accelerate.utils import tqdm
 #   - This implementation simply does N even random augmentations on an
 #     an input image and then just splits the augments evenly across the
 #     teacher and student networks; this actually simplifies the forward
-#     pass since views can just be resized and chunked into simpler input
+#     pass since views can just be resized and chunked into simpler input;
+#     plus it's not entirely clear how much augmentation is actually needed
+#     for performant self-supervised pre-training with joint embedding models
+#     (see https://arxiv.org/abs/2406.09294 for example)
 #
 # - Scheduling:
 #   - Original paper performs cosine scheduling on the learning rate

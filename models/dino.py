@@ -24,6 +24,7 @@ from accelerate.utils import tqdm
 #                                   Comments
 # -----------------------------------------------------------------------------
 
+
 # This is a custom DINO implementation that differs a tad from original paper:
 #
 # - Augmentation:
@@ -52,8 +53,7 @@ from accelerate.utils import tqdm
 #     found too much instability with this implementation but if I do I'll add
 #     gradient clipping and projector freezing
 #
-# model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
-# accelerator.prepare(model)
+
 
 # -----------------------------------------------------------------------------
 #                                   Modules

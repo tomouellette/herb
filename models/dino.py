@@ -57,6 +57,17 @@ from accelerate.utils import tqdm
 #     gradient clipping and projector freezing
 #
 
+# Papers/resources that have been useful for building this DINO implementation:
+#
+# - "Emerging Properties in Self-Supervised Vision Transformers"
+#   Caron et al. (2021). https://arxiv.org/abs/2104.14294
+# - "You Don't Need Data-Augmentation in Self-Supervised Learning"
+#   Moutkanni et al. (2024). https://arxiv.org/abs/2406.09294
+# - The original DINO implementation:
+#   https://github.com/facebookresearch/dino/
+# - Lucidrains DINO implementation:
+#   https://github.com/lucidrains/vit-pytorch/blob/main/vit_pytorch/dino.py
+
 
 # -----------------------------------------------------------------------------
 #                                   Modules

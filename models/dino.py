@@ -56,7 +56,7 @@ from accelerate.utils import tqdm
 #     found too much instability with this implementation but if I do I'll add
 #     gradient clipping and projector freezing
 #
-
+#
 # Papers/resources that have been useful for building this DINO implementation:
 #
 # - "Emerging Properties in Self-Supervised Vision Transformers"

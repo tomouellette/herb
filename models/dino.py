@@ -340,6 +340,84 @@ class StudentTeacherLoss(nn.Module):
 #                                   Functions
 # -----------------------------------------------------------------------------
 
+The verbose parameter is deprecated. Please use get_last_lr()
+def cosine_scheduler(
+    start_value: float,
+    peak_value: float,
+    final_value: float,
+    epochs: int,
+    n_batches_per_epoch: int,
+    warmup_epochs: int = 0,
+) -> List[float]:
+    """Cosine scheduler with optional linear warmup
+
+    Parameters
+    ----------
+    start_value : float
+        Initial value of the scheduler
+    peak_value : float
+        Peak value of the scheduler; i.e. the maximum learning rate at
+        the end of the linear warmup phase
+    final_value : float
+        Final value of the scheduler
+    epochs : int
+        Number of epochs in training run
+    n_batches_per_epoch : int
+        Number of batches iterated over during each epoch
+    warmup_epochs : int
+        Number of epochs to perform the linear warmup
+
+    Notes
+    -----
+    The original DINO paper uses cosine scheduling for the EMA of
+    both the learning rate and the weight decay of the optimizer
+    during training.
+    """
+
+    assert warmup_epochs < epochs, \
+        "Warmup epochs must be < total epochs"
+
+    warmup_schedule = []
+    warmup_steps = warmup_epochs * n_batches_per_epoch
+    for i in range(warmup_steps):
+        warmup_schedule.append(
+            start_value + (peak_value - start_value) * i / warmup_steps
+        )
+
+    cosine_schedule = []
+    cosine_steps = epochs * n_batches_per_epoch - warmup_steps
+    for i in range(cosine_steps):
+        cosine_schedule.append(
+            final_value + 0.5 * (peak_value - final_value)
+            * (1 + torch.cos(torch.tensor(torch.pi * i / cosine_steps)).item())
+        )
+
+    schedule = warmup_schedule + cosine_schedule
+
+    assert len(schedule) == warmup_steps + cosine_steps, \
+        "Schedule length must equal total number of steps"
+
+    return schedule
+
+def clip_gradients(
+    model: nn.Module,
+    clip: float = 3.0
+) -> List[float]:
+    norms = []
+    for name, p in model.named_parameters():
+        if p.grad is not None:
+            param_norm = p.grad.data.norm(2)
+            norms.append(param_norm.item())
+            clip_coef = clip / (param_norm + 1e-6)
+            if clip_coef < 1:
+                p.grad.data.mul_(clip_coef)
+    return norms
+
+
+# -----------------------------------------------------------------------------
+#                                   Training
+# -----------------------------------------------------------------------------
+
 from torchvision import datasets
 from torch.utils.data import DataLoader
 

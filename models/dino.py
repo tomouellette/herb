@@ -44,6 +44,14 @@ from accelerate.utils import tqdm
 #     and fixes the weight decay to a constant value; the momentum on the
 #     teacher network is annealed to 1 using a linear schedule
 #
+# - Training:
+#   - Original paper clips gradients and freezes the projector on the N epochs
+#     and then unfreezes it on N + 1 epoch
+#   - This implementation doesn't freeze the projector on the first epoch and
+#     doesn't clip gradients in the student network during training; I haven't
+#     found too much instability with this implementation but if I do I'll add
+#     gradient clipping and projector freezing
+#
 # model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
 # accelerator.prepare(model)
 

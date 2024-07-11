@@ -67,7 +67,11 @@ from accelerate.utils import tqdm
 #   https://github.com/facebookresearch/dino/
 # - Lucidrains DINO implementation:
 #   https://github.com/lucidrains/vit-pytorch/blob/main/vit_pytorch/dino.py
-
+#
+# Test usage:
+#
+# - From herb root: python3 -m models.dino --test True --epochs 1
+#
 
 # -----------------------------------------------------------------------------
 #                                   Modules

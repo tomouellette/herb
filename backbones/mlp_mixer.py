@@ -142,4 +142,4 @@ if __name__ == "__main__":
     assert out.shape == (1, 4321), \
         f"{prefix} Head failed. Shape is {out.shape}"
 
-    print("[INFO | mlp_mixer ] Basic MLP-Mixer checks passed.")
+    print(f"{prefix} Basic MLP-Mixer checks passed.")

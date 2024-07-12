@@ -33,7 +33,7 @@ python3 -m backbones.zoo
 ### DINO
 
 ```python3
-# Run test training on MNIST (~97% linear probe accuracy)
+# Run test training on MNIST (~96.5% linear probe accuracy)
 python3 -m models.dino --test True --epochs 10
 
 # Run test training on MNIST and generate a GIF of PCA'd embeddings

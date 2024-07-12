@@ -10,6 +10,24 @@ Only `torch`, `torchvision`, and `huggingface` (accelerate) are required for run
 python3 -m pip install -r requirements.txt
 ```
 
+## Backbones
+
+Backbones are pre-specified as `nano`, `micro`, `tiny`, `small`, `base`, and `large` with approximately 2.5M, 5M, 10M, 20M, 80M, and 200M+ parameters at `3 x 224 x 224` image resolution, respectively. Note that the basic `MLP` does not follow this parameter scaling. You can check that each implementation is working (and the parameters) as follows:
+
+```bash
+python3 backbones/convnext.py
+python3 backbones/mlp.py
+python3 backbones/mlp_mixer.py
+python3 backbones/navit.py
+python3 backbones/vit.py
+```
+
+You can also validate that the entire zoo of models is working on your machine.
+
+```bash
+python3 -m backbones.zoo
+```
+
 ## Models
 
 ### DINO

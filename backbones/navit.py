@@ -502,7 +502,32 @@ class Transformer(nn.Module):
         return self.norm(x)
 
 
-def navit_tiny(
+def navit_nano(
+    image_size: int = 224,
+    channels: int = 3,
+    patch_size: int = 16,
+    n_classes: int = 1000,
+    token_drop: float = 0.5,
+    packed_sequence_length: int = 16000
+) -> NaViT:
+    return NaViT(
+        max_image_size=image_size,
+        n_classes=n_classes,
+        patch_size=patch_size,
+        dim=196,
+        depth=6,
+        heads=2,
+        mlp_dim=4 * 196,
+        channels=channels,
+        dim_head=196 // 4,
+        dropout=0.,
+        emb_dropout=0.,
+        token_drop=token_drop,
+        packed_sequence_length=packed_sequence_length
+    )
+
+
+def navit_micro(
     image_size: int = 224,
     channels: int = 3,
     patch_size: int = 16,
@@ -520,6 +545,31 @@ def navit_tiny(
         mlp_dim=4 * 192,
         channels=channels,
         dim_head=192 // 3,
+        dropout=0.,
+        emb_dropout=0.,
+        token_drop=token_drop,
+        packed_sequence_length=packed_sequence_length
+    )
+
+
+def navit_tiny(
+    image_size: int = 224,
+    channels: int = 3,
+    patch_size: int = 16,
+    n_classes: int = 1000,
+    token_drop: float = 0.5,
+    packed_sequence_length: int = 16000
+) -> NaViT:
+    return NaViT(
+        max_image_size=image_size,
+        n_classes=n_classes,
+        patch_size=patch_size,
+        dim=256,
+        depth=12,
+        heads=4,
+        mlp_dim=4 * 256,
+        channels=channels,
+        dim_head=256 // 4,
         dropout=0.,
         emb_dropout=0.,
         token_drop=token_drop,
@@ -589,7 +639,7 @@ def navit_large(
         n_classes=n_classes,
         patch_size=patch_size,
         dim=1024,
-        depth=12,
+        depth=16,
         heads=16,
         mlp_dim=4 * 1024,
         channels=channels,
@@ -637,14 +687,19 @@ if __name__ == "__main__":
     assert pool.shape == (6, 1234), \
         f"{prefix} Pool failed. Shape is {pool.shape}"
 
+    nano = navit_nano()
+    micro = navit_micro()
     tiny = navit_tiny()
     small = navit_small()
     base = navit_base()
     large = navit_large()
 
     def _n_parameters(model):
+        model.head = nn.Identity()
         return sum(p.numel() for p in model.parameters())
 
+    print(f"{prefix} Nano model has {_n_parameters(nano)} parameters.")
+    print(f"{prefix} Micro model has {_n_parameters(micro)} parameters.")
     print(f"{prefix} Tiny model has {_n_parameters(tiny)} parameters.")
     print(f"{prefix} Small model has {_n_parameters(small)} parameters.")
     print(f"{prefix} Base model has {_n_parameters(base)} parameters.")

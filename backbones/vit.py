@@ -256,7 +256,29 @@ class Transformer(nn.Module):
         return x
 
 
-def vit_tiny(
+def vit_nano(
+    image_size: int = 224,
+    channels: int = 3,
+    patch_size: int = 16,
+    n_classes: int = 1000,
+) -> ViT:
+    return ViT(
+        image_size=image_size,
+        channels=channels,
+        patch_size=patch_size,
+        n_classes=n_classes,
+        dim=196,
+        depth=5,
+        heads=2,
+        mlp_dim=4 * 196,
+        dim_head=196 // 2,
+        dropout=0.,
+        emb_dropout=0.,
+        n_registers=8,
+    )
+
+
+def vit_micro(
     image_size: int = 224,
     channels: int = 3,
     patch_size: int = 16,
@@ -274,6 +296,29 @@ def vit_tiny(
         dim_head=192 // 3,
         dropout=0.,
         emb_dropout=0.,
+        n_registers=8,
+    )
+
+
+def vit_tiny(
+    image_size: int = 224,
+    channels: int = 3,
+    patch_size: int = 16,
+    n_classes: int = 1000,
+) -> ViT:
+    return ViT(
+        image_size=image_size,
+        channels=channels,
+        patch_size=patch_size,
+        n_classes=n_classes,
+        dim=256,
+        depth=12,
+        heads=4,
+        mlp_dim=4 * 256,
+        dim_head=256 // 4,
+        dropout=0.,
+        emb_dropout=0.,
+        n_registers=8,
     )
 
 
@@ -295,6 +340,7 @@ def vit_small(
         dropout=0.,
         dim_head=384 // 6,
         emb_dropout=0.,
+        n_registers=8,
     )
 
 
@@ -316,6 +362,7 @@ def vit_base(
         dropout=0.,
         dim_head=768 // 12,
         emb_dropout=0.,
+        n_registers=8,
     )
 
 
@@ -331,12 +378,13 @@ def vit_large(
         patch_size=patch_size,
         n_classes=n_classes,
         dim=1024,
-        depth=24,
+        depth=16,
         heads=16,
         mlp_dim=4 * 1024,
         dropout=0.,
         dim_head=1024 // 16,
         emb_dropout=0.,
+        n_registers=8,
     )
 
 
@@ -364,14 +412,19 @@ if __name__ == "__main__":
     assert out.shape == (1, 4321), \
         f"{prefix} Head failed. Shape is {out.shape}"
 
+    nano = vit_nano()
+    micro = vit_micro()
     tiny = vit_tiny()
     small = vit_small()
     base = vit_base()
     large = vit_large()
 
     def _n_parameters(model):
+        model.head = nn.Identity()
         return sum(p.numel() for p in model.parameters())
 
+    print(f"{prefix} Nano model has {_n_parameters(nano)} parameters.")
+    print(f"{prefix} Micro model has {_n_parameters(micro)} parameters.")
     print(f"{prefix} Tiny model has {_n_parameters(tiny)} parameters.")
     print(f"{prefix} Small model has {_n_parameters(small)} parameters.")
     print(f"{prefix} Base model has {_n_parameters(base)} parameters.")

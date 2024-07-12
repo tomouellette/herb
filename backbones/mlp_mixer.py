@@ -126,7 +126,7 @@ class MLPMixer(nn.Module):
         return x
 
 
-def mlp_mixer_tiny(
+def mlp_mixer_nano(
     image_size: int = 224,
     channels: int = 3,
     patch_size: int = 16,
@@ -136,7 +136,7 @@ def mlp_mixer_tiny(
         img_size=image_size,
         in_chans=channels,
         patch_size=patch_size,
-        dim=768,
+        dim=256,
         depth=6,
         n_classes=n_classes,
         expansion_factor=4,
@@ -145,7 +145,26 @@ def mlp_mixer_tiny(
     )
 
 
-def mlp_mixer_small(
+def mlp_mixer_micro(
+    image_size: int = 224,
+    channels: int = 3,
+    patch_size: int = 16,
+    n_classes: int = 1000
+) -> MLPMixer:
+    return MLPMixer(
+        img_size=image_size,
+        in_chans=channels,
+        patch_size=patch_size,
+        dim=512,
+        depth=8,
+        n_classes=n_classes,
+        expansion_factor=4,
+        expansion_factor_token=0.5,
+        dropout=0.
+    )
+
+
+def mlp_mixer_tiny(
     image_size: int = 224,
     channels: int = 3,
     patch_size: int = 16,
@@ -164,6 +183,25 @@ def mlp_mixer_small(
     )
 
 
+def mlp_mixer_small(
+    image_size: int = 224,
+    channels: int = 3,
+    patch_size: int = 16,
+    n_classes: int = 1000
+) -> MLPMixer:
+    return MLPMixer(
+        img_size=image_size,
+        in_chans=channels,
+        patch_size=patch_size,
+        dim=1152,
+        depth=12,
+        n_classes=n_classes,
+        expansion_factor=4,
+        expansion_factor_token=0.5,
+        dropout=0.
+    )
+
+
 def mlp_mixer_base(
     image_size: int = 224,
     channels: int = 3,
@@ -174,8 +212,8 @@ def mlp_mixer_base(
         img_size=image_size,
         in_chans=channels,
         patch_size=patch_size,
-        dim=1280,
-        depth=12,
+        dim=2176,
+        depth=16,
         n_classes=n_classes,
         expansion_factor=4,
         expansion_factor_token=0.5,
@@ -193,8 +231,8 @@ def mlp_mixer_large(
         img_size=image_size,
         in_chans=channels,
         patch_size=patch_size,
-        dim=1536,
-        depth=24,
+        dim=3072,
+        depth=21,
         n_classes=n_classes,
         expansion_factor=4,
         expansion_factor_token=0.5,
@@ -218,14 +256,19 @@ if __name__ == "__main__":
     assert out.shape == (1, 4321), \
         f"{prefix} Head failed. Shape is {out.shape}"
 
+    nano = mlp_mixer_nano()
+    micro = mlp_mixer_micro()
     tiny = mlp_mixer_tiny()
     small = mlp_mixer_small()
     base = mlp_mixer_base()
     large = mlp_mixer_large()
 
     def _n_parameters(model):
+        model.head = nn.Identity()
         return sum(p.numel() for p in model.parameters())
 
+    print(f"{prefix} Nano model has {_n_parameters(nano)} parameters.")
+    print(f"{prefix} Micro model has {_n_parameters(micro)} parameters.")
     print(f"{prefix} Tiny model has {_n_parameters(tiny)} parameters.")
     print(f"{prefix} Small model has {_n_parameters(small)} parameters.")
     print(f"{prefix} Base model has {_n_parameters(base)} parameters.")

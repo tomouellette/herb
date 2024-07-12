@@ -505,18 +505,27 @@ def momentum_schedule(
 
 def test_mnist(batch_size: int = 64, transform=None):
     """Load MNIST data"""
+    import os
     import ssl
+    import shutil
     import numpy as np
     from torchvision.datasets import MNIST
+    from sklearn.manifold import TSNE
     from torch.utils.data import DataLoader
     from sklearn.linear_model import LogisticRegression
     from sklearn.metrics import accuracy_score
+    from sklearn.decomposition import PCA
     import matplotlib.pyplot as plt
 
     test_transform = T.Compose([
         T.ToTensor(),
         T.Normalize((0.5,), (0.5,))
     ])
+
+    if os.path.exists("tests/dino/"):
+        shutil.rmtree("tests/dino/")
+
+    os.makedirs("tests/dino/")
 
     ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -534,17 +543,32 @@ def test_mnist(batch_size: int = 64, transform=None):
     )
 
     @torch.no_grad()
-    def evaluation_function(student_teacher, test_loader, epoch, device):
+    def evaluation_function(
+        student_teacher,
+        test_loader,
+        epoch,
+        device,
+        finalize: bool = False,
+    ):
+        GIF = type(1)(os.getenv('GIF', 1))
+
+        if GIF and finalize:
+            import imageio
+
         student_teacher.eval()
         tz, sz, y = [], [], []
-        for xi, yi in tqdm(test_loader):
-            tzi = student_teacher.teacher_encoder(xi.to(device))
-            szi = student_teacher.student_encoder(xi.to(device))
-            tzi = tzi.flatten(1)
-            szi = szi.flatten(1)
-            tz.append(tzi.detach().cpu().numpy())
-            sz.append(szi.detach().cpu().numpy())
-            y.append(yi.numpy())
+        with tqdm(test_loader) as progress:
+            description = message(f"Epoch {epoch} | Testing", cout=False)
+            description = description.replace("INFO", "TEST")
+            for xi, yi in progress:
+                progress.set_description(description)
+                tzi = student_teacher.teacher_encoder(xi.to(device))
+                szi = student_teacher.student_encoder(xi.to(device))
+                tzi = tzi.flatten(1)
+                szi = szi.flatten(1)
+                tz.append(tzi.detach().cpu().numpy())
+                sz.append(szi.detach().cpu().numpy())
+                y.append(yi.numpy())
 
         tz = np.concatenate(tz, axis=0)
         sz = np.concatenate(sz, axis=0)
@@ -552,6 +576,19 @@ def test_mnist(batch_size: int = 64, transform=None):
 
         tz = (tz - tz.mean(axis=0)) / tz.std(axis=0)
         sz = (sz - sz.mean(axis=0)) / sz.std(axis=0)
+
+        fig, ax = plt.subplots(1, 2, figsize=(5, 2))
+        tpca = PCA(n_components=2).fit_transform(tz)
+        spca = PCA(n_components=2).fit_transform(sz)
+        ax[0].scatter(*tpca.T, c=y, cmap="tab10", alpha=0.5, s=1.5)
+        ax[1].scatter(*spca.T, c=y, cmap="tab10", alpha=0.5, s=1.5)
+        ax[0].set_title("Teacher PCA")
+        ax[1].set_title("Student PCA")
+        ax[0].axis("off")
+        ax[1].axis("off")
+        fig.tight_layout()
+        plt.savefig(f"tests/dino/pca_{epoch}.png")
+        plt.close()
 
         np.random.seed(123456)
         for z, name in zip([tz, sz], ["teacher", "student"]):
@@ -574,6 +611,37 @@ def test_mnist(batch_size: int = 64, transform=None):
             y_pred = logreg.predict(x_test)
             acc = accuracy_score(y_test, y_pred)
             message(f"Epoch {epoch} {name} | Accuracy: {acc}")
+
+        if finalize:
+            if GIF:
+                images = []
+                plot_dir = "tests/dino/"
+                for i in range(0, epoch):
+                    filename = os.path.join(plot_dir, f'pca_{i}.png')
+                    images.append(imageio.v3.imread(filename))
+
+                for _ in range(20):
+                    images.append(imageio.v3.imread(filename))
+
+                imageio.v3.imwrite(
+                    os.path.join(plot_dir, 'training.gif'),
+                    images,
+                    loop=1000
+                )
+
+            ttsne = TSNE(n_components=2, n_jobs=-1).fit_transform(tz)
+            stsne = TSNE(n_components=2, n_jobs=-1).fit_transform(sz)
+
+            fig, ax = plt.subplots(1, 2, figsize=(5, 2))
+            ax[0].scatter(*ttsne.T, c=y, cmap="tab10", alpha=0.5, s=1.5)
+            ax[1].scatter(*stsne.T, c=y, cmap="tab10", alpha=0.5, s=1.5)
+            ax[0].set_title("Teacher")
+            ax[1].set_title("Student")
+            ax[0].axis("off")
+            ax[1].axis("off")
+            fig.tight_layout()
+            plt.savefig(f"tests/dino/tsne_{epoch}.png")
+            plt.close()
 
     return train_loader, test_loader, evaluation_function
 
@@ -604,12 +672,12 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--backbone", type=str, default="mlp_mixer_small",
+        "--backbone", type=str, default="mlp_mixer_tiny",
         help="Backbone model"
     )
 
     parser.add_argument(
-        "--epochs", type=int, default=2,
+        "--epochs", type=int, default=16,
         help="Number of epochs"
     )
 
@@ -629,7 +697,7 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--lr_warmup_fraction", type=float, default=0.2,
+        "--lr_warmup_fraction", type=float, default=0.1,
         help="Fraction of total iterations to do linear warmup"
     )
 
@@ -753,7 +821,7 @@ def main(args: argparse.Namespace):
             model="mlp_mixer_tiny",
             image_size=args.image_size,
             channels=args.channels,
-            patch_size=4
+            patch_size=7
         )
 
         loader, test_loader, evaluation_function = test_mnist(
@@ -847,7 +915,13 @@ def main(args: argparse.Namespace):
                 progress.set_postfix({"Loss": loss.item()})
 
         if args.test:
-            evaluation_function(model, test_loader, epoch, device)
+            evaluation_function(
+                model,
+                test_loader,
+                epoch,
+                device,
+                finalize=epoch == args.epochs - 1
+            )
 
 
 if __name__ == "__main__":

@@ -15,9 +15,14 @@ python3 -m pip install -r requirements.txt
 ### DINO
 
 ```python3
+# Run test training
+GIF=1 python3 -m models.dino --test True
+
+# Run standard training
 python3 -m models.dino \
-    --image_folder '/Users/tomouellette/Home/submissions/fqmv-paper/temp/process/cells-almeida/' \
+    --image_folder 'data' \
     --image_size 28 \
+    --backbone 'mlp_mixer_small' \
     --channels 1 \
     --epochs 10 \
     --batch_size 256 \
@@ -38,6 +43,5 @@ python3 -m models.dino \
     --t_teacher_end 0.02 \
     --t_teacher_warmup_fraction 0.1 \
     --t_student 0.1 \
-    --silent False \
-    --test True
+    --silent False
 ```

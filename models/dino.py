@@ -503,7 +503,7 @@ def momentum_schedule(
 # -----------------------------------------------------------------------------
 
 
-def test_mnist(batch_size: int = 64, transform=None):
+def test_mnist(image_size: int, batch_size: int = 64, transform=None):
     """Load MNIST data"""
     import os
     import ssl
@@ -518,6 +518,7 @@ def test_mnist(batch_size: int = 64, transform=None):
     import matplotlib.pyplot as plt
 
     test_transform = T.Compose([
+        T.Resize(image_size),
         T.ToTensor(),
         T.Normalize((0.5,), (0.5,))
     ])
@@ -822,13 +823,14 @@ def main(args: argparse.Namespace):
         )
     else:
         backbone = select_backbone(
-            model="mlp_mixer_tiny",
+            model="mlp_mixer_nano",
             image_size=args.image_size,
             channels=args.channels,
             patch_size=7
         )
 
         loader, test_loader, evaluation_function = test_mnist(
+            args.image_size,
             args.batch_size,
             transform=transform
         )

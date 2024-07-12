@@ -15,7 +15,7 @@ python3 -m pip install -r requirements.txt
 ### DINO
 
 ```python3
-# Run test training
+# Run test training (~97% linear probe accuracy on MNIST)
 GIF=1 python3 -m models.dino --test True
 
 # Run standard training

@@ -672,7 +672,7 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--backbone", type=str, default="mlp_mixer_tiny",
+        "--backbone", type=str, default="mlp_mixer_small",
         help="Backbone model"
     )
 

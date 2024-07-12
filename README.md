@@ -4,7 +4,7 @@ A rough collection of personal scripts, utilities, and implementations for exper
 
 ## Setup
 
-Only `torch`, `torchvision`, and `huggingface` (accelerate) are required for running models and scripts. Additional dependencies are simply there for optional tests.
+Only `torch`, `torchvision`, and `huggingface` (accelerate) are required for running models and scripts. Additional dependencies are used for optional tests (see `requirements.txt`).
 
 ```bash
 python3 -m pip install -r requirements.txt

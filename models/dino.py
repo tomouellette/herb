@@ -6,7 +6,6 @@ import warnings
 import datetime
 import torch.nn as nn
 import torch.nn.functional as F
-from backbones.mlp_mixer import MLPMixer
 
 from PIL import Image
 from torch import Tensor
@@ -18,6 +17,8 @@ from typing import Tuple, List
 
 from accelerate import Accelerator
 from accelerate.utils import tqdm
+
+from backbones.zoo import select_backbone
 
 
 # -----------------------------------------------------------------------------
@@ -510,6 +511,7 @@ def test_mnist(batch_size: int = 64, transform=None):
     from torch.utils.data import DataLoader
     from sklearn.linear_model import LogisticRegression
     from sklearn.metrics import accuracy_score
+    import matplotlib.pyplot as plt
 
     test_transform = T.Compose([
         T.ToTensor(),
@@ -602,12 +604,17 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--backbone", type=str, default="mlp_mixer_small",
+        help="Backbone model"
+    )
+
+    parser.add_argument(
         "--epochs", type=int, default=2,
         help="Number of epochs"
     )
 
     parser.add_argument(
-        "--batch_size", type=int, default=16,
+        "--batch_size", type=int, default=256,
         help="Batch size"
     )
 
@@ -674,7 +681,7 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--n_augments", type=int, default=6,
+        "--n_augments", type=int, default=4,
         help="Number of augmentations per image (must be even number)"
     )
 
@@ -715,7 +722,6 @@ def main(args: argparse.Namespace):
     if args.test:
         args.image_size = 28
         args.channels = 1
-        patch_size = 4
 
     transform = Augmentation(
         args.image_size,
@@ -726,6 +732,12 @@ def main(args: argparse.Namespace):
     )
 
     if not args.test:
+        backbone = select_backbone(
+            model=args.backbone,
+            image_size=args.image_size,
+            channels=args.channels
+        )
+
         dataset = datasets.ImageFolder(
             args.image_folder,
             transform=transform
@@ -737,22 +749,17 @@ def main(args: argparse.Namespace):
             shuffle=True
         )
     else:
+        backbone = select_backbone(
+            model="mlp_mixer_tiny",
+            image_size=args.image_size,
+            channels=args.channels,
+            patch_size=4
+        )
+
         loader, test_loader, evaluation_function = test_mnist(
             args.batch_size,
             transform=transform
         )
-
-    backbone = MLPMixer(
-        args.image_size,
-        args.channels,
-        patch_size=patch_size,
-        dim=64,
-        depth=4,
-        n_classes=1000,
-        expansion_factor=4,
-        expansion_factor_token=0.5,
-        dropout=0.
-    )
 
     backbone.head = nn.Identity()
 

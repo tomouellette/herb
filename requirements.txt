@@ -1,0 +1,12 @@
+# Required libraries
+
+torch
+torchvision
+huggingface
+
+# Packages for testing
+
+numpy
+scikit-learn
+matplotlib
+

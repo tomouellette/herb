@@ -135,7 +135,7 @@ def mlp_mixer_tiny(
     return MLPMixer(
         img_size=image_size,
         in_chans=channels,
-        patch_size=16,
+        patch_size=patch_size,
         dim=768,
         depth=6,
         n_classes=n_classes,
@@ -154,7 +154,7 @@ def mlp_mixer_small(
     return MLPMixer(
         img_size=image_size,
         in_chans=channels,
-        patch_size=16,
+        patch_size=patch_size,
         dim=1024,
         depth=8,
         n_classes=n_classes,
@@ -173,7 +173,7 @@ def mlp_mixer_base(
     return MLPMixer(
         img_size=image_size,
         in_chans=channels,
-        patch_size=16,
+        patch_size=patch_size,
         dim=1280,
         depth=12,
         n_classes=n_classes,
@@ -192,7 +192,7 @@ def mlp_mixer_large(
     return MLPMixer(
         img_size=image_size,
         in_chans=channels,
-        patch_size=16,
+        patch_size=patch_size,
         dim=1536,
         depth=24,
         n_classes=n_classes,

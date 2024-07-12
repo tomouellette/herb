@@ -2,6 +2,16 @@
 
 A rough collection of personal scripts, utilities, and implementations for experimenting, building, and training neural networks. Tired of abstraction bloat? Backbones and models are all self-contained in single files.
 
+## Setup
+
+Only `torch`, `torchvision`, and `huggingface` (accelerate) are required for running models and scripts. Additional dependencies are simply there for optional tests.
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+## Models
+
 ### DINO
 
 ```python3

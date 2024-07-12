@@ -550,7 +550,7 @@ def test_mnist(batch_size: int = 64, transform=None):
         device,
         finalize: bool = False,
     ):
-        GIF = type(1)(os.getenv('GIF', 1))
+        GIF = bool(os.getenv('GIF', 0))
 
         if GIF and finalize:
             import imageio

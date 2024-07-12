@@ -16,7 +16,10 @@ python3 -m pip install -r requirements.txt
 
 ```python3
 # Run test training (~97% linear probe accuracy on MNIST)
-GIF=1 python3 -m models.dino --test True
+python3 -m models.dino --test True
+
+# Run test training and generate a GIF of PCA'd embeddings
+GIF=1 python3 -m models.dino --test True --epochs 10
 
 # Run standard training
 python3 -m models.dino \

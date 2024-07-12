@@ -677,7 +677,7 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--epochs", type=int, default=16,
+        "--epochs", type=int, default=2,
         help="Number of epochs"
     )
 
@@ -699,6 +699,10 @@ def parse_args():
     parser.add_argument(
         "--lr_warmup_fraction", type=float, default=0.1,
         help="Fraction of total iterations to do linear warmup"
+    )
+
+    parser.add_argument(
+        '--weight_decay', type=float, default=0.05,
     )
 
     parser.add_argument(
@@ -844,7 +848,11 @@ def main(args: argparse.Namespace):
 
     model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.max_lr)
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=args.max_lr,
+        weight_decay=args.weight_decay
+    )
 
     scheduler = CosineDecay(
         optimizer,

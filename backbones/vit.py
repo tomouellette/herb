@@ -256,6 +256,90 @@ class Transformer(nn.Module):
         return x
 
 
+def vit_tiny(
+    image_size: int = 224,
+    channels: int = 3,
+    patch_size: int = 16,
+    n_classes: int = 1000,
+) -> ViT:
+    return ViT(
+        image_size=image_size,
+        channels=channels,
+        patch_size=patch_size,
+        n_classes=n_classes,
+        dim=192,
+        depth=12,
+        heads=3,
+        mlp_dim=4 * 192,
+        dim_head=192 // 3,
+        dropout=0.,
+        emb_dropout=0.,
+    )
+
+
+def vit_small(
+    image_size: int = 224,
+    channels: int = 3,
+    patch_size: int = 16,
+    n_classes: int = 1000,
+) -> ViT:
+    return ViT(
+        image_size=image_size,
+        channels=channels,
+        patch_size=patch_size,
+        n_classes=n_classes,
+        dim=384,
+        depth=12,
+        heads=6,
+        mlp_dim=4 * 384,
+        dropout=0.,
+        dim_head=384 // 6,
+        emb_dropout=0.,
+    )
+
+
+def vit_base(
+    image_size: int = 224,
+    channels: int = 3,
+    patch_size: int = 16,
+    n_classes: int = 1000,
+) -> ViT:
+    return ViT(
+        image_size=image_size,
+        channels=channels,
+        patch_size=patch_size,
+        n_classes=n_classes,
+        dim=768,
+        depth=12,
+        heads=12,
+        mlp_dim=4 * 768,
+        dropout=0.,
+        dim_head=768 // 12,
+        emb_dropout=0.,
+    )
+
+
+def vit_large(
+    image_size: int = 224,
+    channels: int = 3,
+    patch_size: int = 16,
+    n_classes: int = 1000,
+) -> ViT:
+    return ViT(
+        image_size=image_size,
+        channels=channels,
+        patch_size=patch_size,
+        n_classes=n_classes,
+        dim=1024,
+        depth=24,
+        heads=16,
+        mlp_dim=4 * 1024,
+        dropout=0.,
+        dim_head=1024 // 16,
+        emb_dropout=0.,
+    )
+
+
 if __name__ == "__main__":
     prefix = "[INFO | vit ]"
 
@@ -279,5 +363,18 @@ if __name__ == "__main__":
     out = model(x)
     assert out.shape == (1, 4321), \
         f"{prefix} Head failed. Shape is {out.shape}"
+
+    tiny = vit_tiny()
+    small = vit_small()
+    base = vit_base()
+    large = vit_large()
+
+    def _n_parameters(model):
+        return sum(p.numel() for p in model.parameters())
+
+    print(f"{prefix} Tiny model has {_n_parameters(tiny)} parameters.")
+    print(f"{prefix} Small model has {_n_parameters(small)} parameters.")
+    print(f"{prefix} Base model has {_n_parameters(base)} parameters.")
+    print(f"{prefix} Large model has {_n_parameters(large)} parameters.")
 
     print(f"{prefix} Basic ViT checks passed.")

@@ -238,7 +238,7 @@ class NaViT(nn.Module):
 
         # NOTE: The packed mask is a matrix with same shape as padded packed
         # sequences where each row is a boolean mask indicating which
-        # patchs are real and which are padded.
+        # patches are real image pixels and which are padded.
 
         max_patch_arange = torch.arange(sequence_lengths.amax().item())
         packed_mask = max_patch_arange[None, :] < sequence_lengths[:, None]
@@ -502,6 +502,105 @@ class Transformer(nn.Module):
         return self.norm(x)
 
 
+def navit_tiny(
+    image_size: int = 224,
+    channels: int = 3,
+    patch_size: int = 16,
+    n_classes: int = 1000,
+    token_drop: float = 0.5,
+    packed_sequence_length: int = 16000
+) -> NaViT:
+    return NaViT(
+        max_image_size=image_size,
+        n_classes=n_classes,
+        patch_size=patch_size,
+        dim=192,
+        depth=12,
+        heads=3,
+        mlp_dim=4 * 192,
+        channels=channels,
+        dim_head=192 // 3,
+        dropout=0.,
+        emb_dropout=0.,
+        token_drop=token_drop,
+        packed_sequence_length=packed_sequence_length
+    )
+
+
+def navit_small(
+    image_size: int = 224,
+    channels: int = 3,
+    patch_size: int = 16,
+    n_classes: int = 1000,
+    token_drop: float = 0.5,
+    packed_sequence_length: int = 16000
+) -> NaViT:
+    return NaViT(
+        max_image_size=image_size,
+        n_classes=n_classes,
+        patch_size=patch_size,
+        dim=384,
+        depth=12,
+        heads=6,
+        mlp_dim=4 * 384,
+        channels=channels,
+        dim_head=384 // 6,
+        dropout=0.,
+        emb_dropout=0.,
+        token_drop=token_drop,
+        packed_sequence_length=packed_sequence_length
+    )
+
+
+def navit_base(
+    image_size: int = 224,
+    channels: int = 3,
+    patch_size: int = 16,
+    n_classes: int = 1000,
+    token_drop: float = 0.5,
+    packed_sequence_length: int = 16000
+) -> NaViT:
+    return NaViT(
+        max_image_size=image_size,
+        n_classes=n_classes,
+        patch_size=patch_size,
+        dim=768,
+        depth=12,
+        heads=12,
+        mlp_dim=4 * 768,
+        channels=channels,
+        dim_head=768 // 12,
+        dropout=0.,
+        emb_dropout=0.,
+        token_drop=token_drop,
+        packed_sequence_length=packed_sequence_length
+    )
+
+
+def navit_large(
+    image_size: int = 224,
+    channels: int = 3,
+    patch_size: int = 16,
+    n_classes: int = 1000,
+    token_drop: float = 0.5
+) -> NaViT:
+    return NaViT(
+        max_image_size=image_size,
+        n_classes=n_classes,
+        patch_size=patch_size,
+        dim=1024,
+        depth=12,
+        heads=16,
+        mlp_dim=4 * 1024,
+        channels=channels,
+        dim_head=1024 // 16,
+        dropout=0.,
+        emb_dropout=0.,
+        token_drop=token_drop,
+        packed_sequence_length=16000
+    )
+
+
 if __name__ == "__main__":
     prefix = "[INFO | navit ]"
 
@@ -537,5 +636,18 @@ if __name__ == "__main__":
     pool = model.forward_pool(*tokens)
     assert pool.shape == (6, 1234), \
         f"{prefix} Pool failed. Shape is {pool.shape}"
+
+    tiny = navit_tiny()
+    small = navit_small()
+    base = navit_base()
+    large = navit_large()
+
+    def _n_parameters(model):
+        return sum(p.numel() for p in model.parameters())
+
+    print(f"{prefix} Tiny model has {_n_parameters(tiny)} parameters.")
+    print(f"{prefix} Small model has {_n_parameters(small)} parameters.")
+    print(f"{prefix} Base model has {_n_parameters(base)} parameters.")
+    print(f"{prefix} Large model has {_n_parameters(large)} parameters.")
 
     print(f"{prefix} Basic NaViT checks passed.")

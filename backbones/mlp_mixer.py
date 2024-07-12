@@ -126,6 +126,82 @@ class MLPMixer(nn.Module):
         return x
 
 
+def mlp_mixer_tiny(
+    image_size: int = 224,
+    channels: int = 3,
+    patch_size: int = 16,
+    n_classes: int = 1000
+) -> MLPMixer:
+    return MLPMixer(
+        img_size=image_size,
+        in_chans=channels,
+        patch_size=16,
+        dim=768,
+        depth=6,
+        n_classes=n_classes,
+        expansion_factor=4,
+        expansion_factor_token=0.5,
+        dropout=0.
+    )
+
+
+def mlp_mixer_small(
+    image_size: int = 224,
+    channels: int = 3,
+    patch_size: int = 16,
+    n_classes: int = 1000
+) -> MLPMixer:
+    return MLPMixer(
+        img_size=image_size,
+        in_chans=channels,
+        patch_size=16,
+        dim=1024,
+        depth=8,
+        n_classes=n_classes,
+        expansion_factor=4,
+        expansion_factor_token=0.5,
+        dropout=0.
+    )
+
+
+def mlp_mixer_base(
+    image_size: int = 224,
+    channels: int = 3,
+    patch_size: int = 16,
+    n_classes: int = 1000
+) -> MLPMixer:
+    return MLPMixer(
+        img_size=image_size,
+        in_chans=channels,
+        patch_size=16,
+        dim=1280,
+        depth=12,
+        n_classes=n_classes,
+        expansion_factor=4,
+        expansion_factor_token=0.5,
+        dropout=0.
+    )
+
+
+def mlp_mixer_large(
+    image_size: int = 224,
+    channels: int = 3,
+    patch_size: int = 16,
+    n_classes: int = 1000
+) -> MLPMixer:
+    return MLPMixer(
+        img_size=image_size,
+        in_chans=channels,
+        patch_size=16,
+        dim=1536,
+        depth=24,
+        n_classes=n_classes,
+        expansion_factor=4,
+        expansion_factor_token=0.5,
+        dropout=0.
+    )
+
+
 if __name__ == "__main__":
     prefix = "[INFO | mlp_mixer ]"
 
@@ -141,5 +217,18 @@ if __name__ == "__main__":
     out = model(x)
     assert out.shape == (1, 4321), \
         f"{prefix} Head failed. Shape is {out.shape}"
+
+    tiny = mlp_mixer_tiny()
+    small = mlp_mixer_small()
+    base = mlp_mixer_base()
+    large = mlp_mixer_large()
+
+    def _n_parameters(model):
+        return sum(p.numel() for p in model.parameters())
+
+    print(f"{prefix} Tiny model has {_n_parameters(tiny)} parameters.")
+    print(f"{prefix} Small model has {_n_parameters(small)} parameters.")
+    print(f"{prefix} Base model has {_n_parameters(base)} parameters.")
+    print(f"{prefix} Large model has {_n_parameters(large)} parameters.")
 
     print(f"{prefix} Basic MLP-Mixer checks passed.")

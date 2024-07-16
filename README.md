@@ -10,6 +10,8 @@ Only `torch`, `torchvision`, and `huggingface` (accelerate) are required for run
 python3 -m pip install -r requirements.txt
 ```
 
+By default, all I/O for various models are handled through the basic pytorch `ImageFolder` dataset. If you want faster I/O that works across shards, you can replace these blocks with a `webdataset` dataset.
+
 ## Backbones
 
 Backbones are pre-specified as `nano`, `micro`, `tiny`, `small`, `base`, and `large` with approximately 2.5M, 5M, 10M, 20M, 80M, and 200M+ parameters at `3 x 224 x 224` image resolution, respectively. Note that the basic `MLP` does not follow this parameter scaling. You can check that each implementation is working (and the parameters) as follows:

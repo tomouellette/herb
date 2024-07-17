@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from collections import OrderedDict
 from typing import Union
 
 
@@ -50,50 +51,57 @@ class MLPMixer(nn.Module):
         dropout: float = 0.
     ):
         super().__init__()
-
         if isinstance(img_size, tuple):
             image_h, image_w = img_size
         else:
             image_h, image_w = (img_size, img_size)
 
+        self.img_size = (image_h, image_w)
+        self.in_chans = in_chans
+        self.patch_size = patch_size
+        self.expansion_factor = expansion_factor
+        self.expansion_factor_token = expansion_factor_token
+        self.dropout = dropout
+
         if not (image_h % patch_size) == 0 or not (image_w % patch_size) == 0:
             raise ValueError('Image must be divisible by patch size')
 
-        self.patch_size = patch_size
         self.num_patches = (image_h // patch_size) * (image_w // patch_size)
+
+        print(f"patch_embed: ", (patch_size ** 2) * in_chans, dim)
 
         self.patch_embed = nn.Linear((patch_size ** 2) * in_chans, dim)
 
         self.mixer_layers = nn.ModuleList([])
         for _ in range(depth):
             channels_mixer = [
-                nn.LayerNorm(dim),
-                nn.Conv1d(
+                ("norm1", nn.LayerNorm(dim)),
+                ("conv1", nn.Conv1d(
                     self.num_patches,
                     int(self.num_patches * expansion_factor),
                     kernel_size=1
-                ),
-                nn.GELU(),
-                nn.Dropout(dropout),
-                nn.Conv1d(
+                )),
+                ("gelu1", nn.GELU()),
+                ("drop1", nn.Dropout(dropout)),
+                ("conv2", nn.Conv1d(
                     int(self.num_patches * expansion_factor),
                     self.num_patches,
                     kernel_size=1
-                ),
-                nn.Dropout(dropout)
+                )),
+                ("drop2", nn.Dropout(dropout))
             ]
 
             tokens_mixer = [
-                nn.LayerNorm(dim),
-                nn.Linear(dim, int(dim * expansion_factor_token)),
-                nn.GELU(),
-                nn.Dropout(dropout),
-                nn.Linear(int(dim * expansion_factor_token), dim),
-                nn.Dropout(dropout)
+                ("norm2", nn.LayerNorm(dim)),
+                ("fc1", nn.Linear(dim, int(dim * expansion_factor_token))),
+                ("gelu2", nn.GELU()),
+                ("drop3", nn.Dropout(dropout)),
+                ("fc2", nn.Linear(int(dim * expansion_factor_token), dim)),
+                ("drop4", nn.Dropout(dropout))
             ]
 
             self.mixer_layers.append(
-                nn.Sequential(*channels_mixer, *tokens_mixer)
+                nn.Sequential(OrderedDict([*channels_mixer, *tokens_mixer]))
             )
 
         self.head = nn.Sequential(
@@ -122,6 +130,7 @@ class MLPMixer(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.forward_embed(x)
+        print(x.shape)
         x = self.head(x).squeeze(1)
         return x
 
@@ -275,3 +284,42 @@ if __name__ == "__main__":
     print(f"{prefix} Large model has {_n_parameters(large)} parameters.")
 
     print(f"{prefix} Basic MLP-Mixer checks passed.")
+
+    from safetensors.torch import save_file
+    # norm1: LayerNorm,
+    # conv1: Conv1d,
+    # conv2: Conv1d,
+    # norm2: LayerNorm,
+    # fc1: Linear,
+    # fc2: Linear,
+    # dropout_rate: f32,
+    nano = mlp_mixer_nano()
+    state_dict = nano.state_dict()
+    print(state_dict["patch_embed.weight"].shape)
+    store = {}
+    store["parameters"] = torch.tensor([
+        nano.img_size[0],
+        nano.img_size[1],
+        nano.in_chans,
+        nano.patch_size,
+        nano.expansion_factor,
+        nano.expansion_factor_token,
+        nano.dropout,
+    ], dtype=torch.float32)
+
+    # Write a state dict that is ordered
+    for i, key in enumerate(state_dict):
+        values = state_dict[key]
+        values[:] = 1.0 * i
+        store[key] = values
+
+    print(store["patch_embed.weight"].shape)
+
+    save_file(store, "backbones/candle_mlp_mixer/mlp_mixer.safetensors")
+
+
+
+
+
+
+

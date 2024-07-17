@@ -1,8 +1,9 @@
 use std::string::String;
 use std::collections::HashMap;
 
+use candle_core::utils::{cuda_is_available, metal_is_available};
 use candle_core::{DType, Device, Result, Tensor};
-use candle_nn::{VarMap, Linear, LayerNorm, Conv1d, Module};
+use candle_nn::{Linear, LayerNorm, Conv1d, Module};
 use candle_nn::{linear, layer_norm, conv1d, VarBuilder};
 use candle_nn::ops::dropout;
 
@@ -108,16 +109,16 @@ impl Module for MixerHead {
 }
 
 #[derive(Debug)]
-struct MLPMixer {
-    pub patch_embed: Linear,
-    pub mixer_layers: Vec<MixerLayer>,
-    pub head: MixerHead,
-    pub with_head: bool,
-    pub patch_size: usize,
+pub struct MLPMixer {
+    patch_embed: Linear,
+    mixer_layers: Vec<MixerLayer>,
+    head: MixerHead,
+    with_head: bool,
+    patch_size: usize,
 }
 
 impl MLPMixer {
-    fn new(
+    pub fn new(
         vb: VarBuilder,
         image_size: (usize, usize),
         in_chans: usize,
@@ -137,16 +138,6 @@ impl MLPMixer {
         }
 
         let num_patches = (h / patch_size) * (w / patch_size);
-
-        println!("Number of patches: {}", num_patches);
-        println!("Patch size: {}", patch_size);
-        println!("Number of classes: {}", n_classes);
-        println!("Input channels: {}", in_chans);
-        println!("Embedding dimension: {}", dim);
-        println!("Number of layers: {}", depth);
-        println!("Expansion factor: {}", expansion_factor);
-        println!("Expansion factor tokens: {}", expansion_factor_tokens);
-        
         let patch_embed = linear(in_chans * patch_size * patch_size, dim, vb.pp("patch_embed"))?;
 
         let mixer_layers = (0..depth)
@@ -176,6 +167,56 @@ impl MLPMixer {
             with_head,
             patch_size,
         })
+    }
+
+    pub fn load(path: &str, device: &Device) -> Result<Self> {
+        let mut weights = candle_core::safetensors::load(path, &device)?;
+
+        let dim = weights
+            .get("patch_embed.weight")
+            .unwrap()
+            .shape().dims()[0];
+
+        let depth = weights
+            .iter()
+            .filter(|(name, _)| name.starts_with("mixer_layers"))
+            .count() / 6 / 2;
+
+        let parameters = weights
+            .get("parameters")
+            .unwrap()
+            .to_vec1::<f32>()
+            .unwrap();
+
+        let image_size = (parameters[0] as usize, parameters[1] as usize);
+        let in_chans = parameters[2] as usize;
+        let patch_size = parameters[3] as usize;
+        let expansion_factor = parameters[4] as usize;
+        let expansion_factor_tokens = parameters[5];
+        let dropout_rate = parameters[6];
+
+        let n_classes = if !weights.contains_key("head.0.weight") {
+            0
+        } else {
+            weights.get("head.2.weight").unwrap().shape().dims()[0]
+        };
+
+        weights.remove("parameters");
+
+        let vb = VarBuilder::from_tensors(weights, DType::F32, &device);
+
+        Self::new(
+            vb,
+            image_size,
+            in_chans,
+            patch_size,
+            dim,
+            depth,
+            n_classes,
+            expansion_factor,
+            expansion_factor_tokens,
+            dropout_rate,
+        )
     }
 }
 
@@ -211,76 +252,25 @@ impl Module for MLPMixer {
     }
 }
 
+pub fn device(cpu: bool) -> Result<Device> {
+    if cpu {
+        Ok(Device::Cpu)
+    } else if cuda_is_available() {
+        Ok(Device::new_cuda(0)?)
+    } else if metal_is_available() {
+        Ok(Device::new_metal(0)?)
+    } else {
+        Ok(Device::Cpu)
+    }
+}
         
 fn main() {
-    let device = Device::Cpu;
-    let x = Tensor::rand(0.0, 1.0, &[1, 3, 224, 224], &device).unwrap();
+    let device = device(false).unwrap_or(Device::Cpu);
+
+    let x = Tensor::rand(0.0_f32, 1.0_f32, &[1, 3, 224, 224], &device).unwrap();
     let x = x.to_dtype(candle_core::DType::F32).unwrap();
-
-    let mut weights = candle_core::safetensors::load("mlp_mixer.safetensors", &device).unwrap();
-
-    for (name, tensor) in weights.iter() {
-        println!("{}: {:?}", name, tensor.shape());
-    }
-
-    let dim = weights
-        .get("patch_embed.weight")
-        .unwrap()
-        .shape().dims()[0];
-
-    let depth = weights
-        .iter()
-        .filter(|(name, _)| name.starts_with("mixer_layers"))
-        .count() / 6 / 2;
-
-    let parameters = weights
-        .get("parameters")
-        .unwrap()
-        .to_vec1::<f32>()
-        .unwrap();
-
-    let image_size = (parameters[0] as usize, parameters[1] as usize);
-    let in_chans = parameters[2] as usize;
-    let patch_size = parameters[3] as usize;
-    let expansion_factor = parameters[4] as usize;
-    let expansion_factor_tokens = parameters[5];
-    let dropout_rate = parameters[6];
-    
-    println!("weights patch_embed: {:?}", weights.get("patch_embed.weight").unwrap().shape());
-    println!("bias patch_embed: {:?}", weights.get("patch_embed.bias").unwrap().shape());
-    
-    let n_classes = if !weights.contains_key("head.0.weight") {
-        println!("head.fc.weight not detected. Only initializing embedding backbone.");
-        0
-    } else {
-        weights.get("head.2.weight").unwrap().shape().dims()[0]
-    };
-
-    let mut hashmap: HashMap<String, Tensor> = HashMap::new();
-    hashmap.insert("patch_embed".to_string(), weights.get("patch_embed.weight").unwrap().clone());
-
-    // remove parameters from weights
-    weights.remove("parameters");
-
-    let vb = VarBuilder::from_tensors(weights, DType::F32, &device);
-    //  get<S: Into<Shape>>(&self, s: S, name: &str) -> Result<Tensor>
-    // get patche embed
-    // let patch_embed = vb.get((in_chans * patch_size * patch_size, dim), "patch_embed.weight").unwrap();
-    // println!("patch_embedASDASDASDAS: {:?}", patch_embed.shape());
-
-    let model = MLPMixer::new(
-        vb,
-        image_size,
-        in_chans,
-        patch_size,
-        dim,
-        depth,
-        n_classes,
-        expansion_factor,
-        expansion_factor_tokens,
-        dropout_rate,
-    ).unwrap();
-
+    let model = MLPMixer::load("mlp_mixer.safetensors", &device).unwrap();
     let output = model.forward(&x).unwrap();
-    println!("output: {:?}", output.shape());
+
+    println!("MLPMixer Output: {:?}", output.shape());
 }

@@ -67,9 +67,6 @@ class MLPMixer(nn.Module):
             raise ValueError('Image must be divisible by patch size')
 
         self.num_patches = (image_h // patch_size) * (image_w // patch_size)
-
-        print(f"patch_embed: ", (patch_size ** 2) * in_chans, dim)
-
         self.patch_embed = nn.Linear((patch_size ** 2) * in_chans, dim)
 
         self.mixer_layers = nn.ModuleList([])
@@ -130,9 +127,32 @@ class MLPMixer(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.forward_embed(x)
-        print(x.shape)
         x = self.head(x).squeeze(1)
         return x
+
+    def save(self, path: str, kind: str = None):
+        state_dict = self.state_dict()
+        state_dict["parameters"] = torch.tensor([
+            self.img_size[0],
+            self.img_size[1],
+            self.in_chans,
+            self.patch_size,
+            self.expansion_factor,
+            self.expansion_factor_token,
+            self.dropout,
+        ], dtype=torch.float32)
+
+        if kind == "torch" or path.endswith((".pth", ".pt")):
+            if not path.endswith(".pth"):
+                path = path + ".pth"
+
+            torch.save(self.state_dict(), path)
+        elif kind == "safetensors" or path.endswith(".safetensors"):
+            from safetensors.torch import save_file
+            if not path.endswith(".safetensors"):
+                path = path + ".safetensors"
+
+            save_file(state_dict, path)
 
 
 def mlp_mixer_nano(
@@ -284,42 +304,3 @@ if __name__ == "__main__":
     print(f"{prefix} Large model has {_n_parameters(large)} parameters.")
 
     print(f"{prefix} Basic MLP-Mixer checks passed.")
-
-    from safetensors.torch import save_file
-    # norm1: LayerNorm,
-    # conv1: Conv1d,
-    # conv2: Conv1d,
-    # norm2: LayerNorm,
-    # fc1: Linear,
-    # fc2: Linear,
-    # dropout_rate: f32,
-    nano = mlp_mixer_nano()
-    state_dict = nano.state_dict()
-    print(state_dict["patch_embed.weight"].shape)
-    store = {}
-    store["parameters"] = torch.tensor([
-        nano.img_size[0],
-        nano.img_size[1],
-        nano.in_chans,
-        nano.patch_size,
-        nano.expansion_factor,
-        nano.expansion_factor_token,
-        nano.dropout,
-    ], dtype=torch.float32)
-
-    # Write a state dict that is ordered
-    for i, key in enumerate(state_dict):
-        values = state_dict[key]
-        values[:] = 1.0 * i
-        store[key] = values
-
-    print(store["patch_embed.weight"].shape)
-
-    save_file(store, "backbones/candle_mlp_mixer/mlp_mixer.safetensors")
-
-
-
-
-
-
-

@@ -131,8 +131,7 @@ class MLPMixer(nn.Module):
         return x
 
     def save(self, path: str, kind: str = None):
-        state_dict = self.state_dict()
-        state_dict = {k: v.cpu() for k, v in model.state_dict().items()}
+        state_dict = {k: v.cpu() for k, v in self.state_dict().items()}
         state_dict["parameters"] = torch.tensor([
             self.img_size[0],
             self.img_size[1],

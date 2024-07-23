@@ -92,8 +92,8 @@ struct MixerHead {
 
 impl MixerHead {
     fn new(vb: &VarBuilder, dim: usize, num_patches: usize, n_classes: usize) -> Result<Self> {
-        let norm = layer_norm(dim, 1e-5, vb.pp("head.0"))?;
-        let fc = linear(dim, n_classes, vb.pp("head.2"))?;
+        let norm = layer_norm(dim, 1e-5, vb.pp("norm"))?;
+        let fc = linear(dim, n_classes, vb.pp("head"))?;
         Ok(Self { norm, fc, num_patches })
     }
 }
@@ -195,10 +195,10 @@ impl MLPMixer {
         let expansion_factor_tokens = parameters[5];
         let dropout_rate = parameters[6];
 
-        let n_classes = if !weights.contains_key("head.0.weight") {
+        let n_classes = if !weights.contains_key("head.weight") {
             0
         } else {
-            weights.get("head.2.weight").unwrap().shape().dims()[0]
+            weights.get("head.weight").unwrap().shape().dims()[0]
         };
 
         weights.remove("parameters");

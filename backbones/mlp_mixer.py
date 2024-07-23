@@ -101,11 +101,9 @@ class MLPMixer(nn.Module):
                 nn.Sequential(OrderedDict([*channels_mixer, *tokens_mixer]))
             )
 
-        self.head = nn.Sequential(
-            nn.LayerNorm(dim),
-            nn.AvgPool2d(kernel_size=(self.num_patches, 1)),
-            nn.Linear(dim, n_classes)
-        )
+        self.norm = nn.LayerNorm(dim)
+        self.pool = nn.AvgPool2d(kernel_size=(self.num_patches, 1))
+        self.head = nn.Linear(dim, n_classes)
 
     def forward_embed(self, x: torch.Tensor) -> torch.Tensor:
         _, c, h, w = x.shape
@@ -123,11 +121,14 @@ class MLPMixer(nn.Module):
         for mixer in self.mixer_layers:
             x = mixer(x) + x
 
+        x = self.norm(x)
+        x = self.pool(x).squeeze(1)
+
         return x
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.forward_embed(x)
-        x = self.head(x).squeeze(1)
+        x = self.head(x)
         return x
 
     def save(self, path: str, kind: str = None):
@@ -278,7 +279,7 @@ if __name__ == "__main__":
     x = torch.randn(1, 3, 224, 224)
 
     embed = model.forward_embed(x)
-    assert embed.shape == (1, 49, 1234), \
+    assert embed.shape == (1, 1234), \
         f"{prefix} Embed failed. Shape is {embed.shape}"
 
     out = model(x)
@@ -291,6 +292,8 @@ if __name__ == "__main__":
     small = mlp_mixer_small()
     base = mlp_mixer_base()
     large = mlp_mixer_large()
+
+    nano.save("backbones/candle_mlp_mixer/mlp_mixer.safetensors")
 
     def _n_parameters(model):
         model.head = nn.Identity()

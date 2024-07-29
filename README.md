@@ -36,7 +36,7 @@ If you run a backbone interactively or in a script, you can save them to `pytorc
 from backbones.mlp_mixer import mlp_mixer_small
 
 model = mlp_mixer_small()
-model.save("mlp_mixer_small.pt") # PyTorch format
+model.save("mlp_mixer_small.pth") # PyTorch format
 model.save("mlp_mixer_small.safetensors") # safetensors format
 ```
 

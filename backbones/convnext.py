@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 import torch.nn.functional as F
+from collections import OrderedDict
 from typing import Tuple
 
 
@@ -41,19 +42,34 @@ class ConvNeXtV2(nn.Module):
     ):
         super().__init__()
         self.depths = depths
+        self.dims = dims
+        self.out_dim = dims[-1]
+        self.in_chans = in_chans
+        self.n_classes = n_classes
+
         self.downsample_layers = nn.ModuleList()
-        stem = nn.Sequential(
-            nn.Conv2d(in_chans, dims[0], kernel_size=4, stride=4),
-            LayerNorm(dims[0], eps=1e-6, channel_pos="first")
-        )
-        self.downsample_layers.append(stem)
+        self.downsample_layers.append(nn.Sequential(OrderedDict([
+            ("in_conv", nn.Conv2d(in_chans, dims[0], kernel_size=4, stride=4)),
+            ("in_norm", LayerNorm(dims[0], eps=1e-6, channel_pos="first"))
+        ])))
 
         for i in range(3):
-            downsample_layer = nn.Sequential(
-                    LayerNorm(dims[i], eps=1e-6, channel_pos="first"),
-                    nn.Conv2d(dims[i], dims[i+1], kernel_size=2, stride=2),
+            downsample_layer = [
+                (f"downsample_norm{i}", LayerNorm(
+                    dims[i],
+                    eps=1e-6,
+                    channel_pos="first"
+                )),
+                (f"downsample_conv{i}", nn.Conv2d(
+                    dims[i],
+                    dims[i+1],
+                    kernel_size=2,
+                    stride=2
+                )),
+            ]
+            self.downsample_layers.append(
+                nn.Sequential(OrderedDict(downsample_layer))
             )
-            self.downsample_layers.append(downsample_layer)
 
         dp_rates = torch.linspace(0, drop_path_rate, sum(depths)).tolist()
 
@@ -61,12 +77,12 @@ class ConvNeXtV2(nn.Module):
         self.stages = nn.ModuleList()
         for i in range(4):
             stage = nn.Sequential(
-                *[
-                    ConvNeXtBlock(
+                OrderedDict([
+                    (f"convnext_block{j}", ConvNeXtBlock(
                         in_chans=dims[i],
                         drop_path=dp_rates[current_stage + j]
-                    ) for j in range(depths[i])
-                ]
+                    )) for j in range(depths[i])
+                ])
             )
             self.stages.append(stage)
             current_stage += depths[i]
@@ -81,12 +97,40 @@ class ConvNeXtV2(nn.Module):
         for i in range(4):
             x = self.downsample_layers[i](x)
             x = self.stages[i](x)
+
         return self.norm(x.mean([-2, -1]))
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.forward_embed(x)
         x = self.head(x)
         return x
+
+    def save(self, path: str, kind: str = None):
+        state_dict = {k: v.cpu() for k, v in self.state_dict().items()}
+        for k, v in [
+            ("in_chans", self.in_chans),
+            ("depths", self.depths),
+            ("dims", self.dims),
+            ("out_dim", self.out_dim),
+            ("n_classes", self.n_classes),
+        ]:
+            dtype = torch.int64
+            if isinstance(v, (list, tuple)):
+                state_dict[k] = torch.tensor(v, dtype=dtype)
+            else:
+                state_dict[k] = torch.tensor([v], dtype=dtype)
+
+        if kind == "torch" or path.endswith((".pth", ".pt")):
+            if not path.endswith(".pth"):
+                path = path + ".pth"
+
+            torch.save(self.state_dict(), path)
+        elif kind == "safetensors" or path.endswith(".safetensors"):
+            from safetensors.torch import save_file
+            if not path.endswith(".safetensors"):
+                path = path + ".safetensors"
+
+            save_file(state_dict, path)
 
 
 class DropPath(nn.Module):
@@ -219,13 +263,13 @@ class ConvNeXtBlock(nn.Module):
             groups=in_chans,
         )
 
-        self.pointwise_convolutions = nn.Sequential(
-            nn.LayerNorm(in_chans, eps=1e-6),
-            nn.Linear(in_chans, expansion_factor * in_chans),
-            nn.GELU(),
-            GRN(expansion_factor * in_chans),
-            nn.Linear(expansion_factor * in_chans, in_chans),
-        )
+        self.pointwise_convolutions = nn.Sequential(OrderedDict([
+            ('pw_norm', nn.LayerNorm(in_chans, eps=1e-6)),
+            ('pw_linear1', nn.Linear(in_chans, expansion_factor * in_chans)),
+            ('pw_gelu', nn.GELU()),
+            ('pw_grn', GRN(expansion_factor * in_chans)),
+            ('pw_linear2', nn.Linear(expansion_factor * in_chans, in_chans)),
+        ]))
 
         self.drop_path = nn.Identity()
         if drop_path > 0.:
@@ -359,6 +403,8 @@ if __name__ == "__main__":
     small = convnext_small()
     base = convnext_base()
     large = convnext_large()
+
+    nano.save("backbones/candle_convnext/convnext.safetensors")
 
     def _n_parameters(model):
         model.head = nn.Identity()

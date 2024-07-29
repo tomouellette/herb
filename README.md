@@ -30,6 +30,16 @@ You can also validate that the entire zoo of models is working on your machine.
 python3 -m backbones.zoo
 ```
 
+If you run a backbone interactively or in a script, you can save them to `pytorch` or `safetensors` format as follows:
+
+```python3
+from backbones.mlp_mixer import mlp_mixer_small
+
+model = mlp_mixer_small()
+model.save("mlp_mixer_small.pt") # PyTorch format
+model.save("mlp_mixer_small.safetensors") # safetensors format
+```
+
 ## Models
 
 ### DINO

@@ -71,9 +71,18 @@ python3 -m models.dino \
 
 ## Inference
 
-A variety of backbones also have matching implementations written in Rust using the `candle` library. Any backbone trained in pytorch and saved as a safetensor can be loaded and run in Rust. You'll need to modify the code for your downstream application. Here's an example with the `MLPMixer` backbone assuming you have `cargo` installed.
+A variety of backbones also have matching implementations written in Rust using the `candle` library. Any backbone trained in pytorch and saved as a safetensor can be loaded and run in Rust. You'll need to modify the code for your downstream application. Here's some example backbones, assuming you have `cargo` installed.
+
+### MLPMixer
 
 ```bash
 cd backbones/candle_mlp_mixer/
 cargo run --release # >> MLPMixer Output: [1, 1000]
+```
+
+### ConvNext
+
+```bash
+cd backbones/candle_convnext/
+cargo run --release # >> ConvNext Output: [1, 1000]
 ```

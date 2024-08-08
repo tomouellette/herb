@@ -418,3 +418,25 @@ if __name__ == "__main__":
     print(f"{prefix} Large model has {_n_parameters(large)} parameters.")
 
     print(f"{prefix} Basic ConvNeXt checks passed.")
+
+    import time
+    x = torch.randn(1, 3, 224, 224)
+
+    def runtime(model, name):
+        start = time.time()
+        model.eval()
+        with torch.no_grad():
+            for _ in range(10):
+                _ = model(x)
+        end = time.time()
+        mean = (end - start) / 10
+        print(
+            f"{prefix} Inference for {name} is {mean:.3f} images/second (CPU)."
+        )
+
+    runtime(nano, "nano")
+    runtime(micro, "micro")
+    runtime(tiny, "tiny")
+    runtime(small, "small")
+    runtime(base, "base")
+    runtime(large, "large")

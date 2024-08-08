@@ -83,6 +83,13 @@ python3 -m models.dino \
 
 A variety of backbones also have matching implementations written in Rust using the `candle` library. Any backbone trained in pytorch and saved as a safetensor can be loaded and run in Rust. You'll need to modify the code for your downstream application. Here's some example backbones, assuming you have `cargo` installed.
 
+### ConvNext
+
+```bash
+cd backbones/candle_convnext/
+cargo run --release # >> ConvNext Output: [1, 1000]
+```
+
 ### MLPMixer
 
 ```bash
@@ -90,9 +97,10 @@ cd backbones/candle_mlp_mixer/
 cargo run --release # >> MLPMixer Output: [1, 1000]
 ```
 
-### ConvNext
+### ViT
 
 ```bash
-cd backbones/candle_convnext/
-cargo run --release # >> ConvNext Output: [1, 1000]
+cd backbones/candle_vit/
+cargo run --release # >> ViT Output: [1, 1000]
 ```
+

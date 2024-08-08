@@ -1,6 +1,3 @@
-use std::string::String;
-use std::collections::HashMap;
-
 use candle_core::utils::{cuda_is_available, metal_is_available};
 use candle_core::{DType, Device, Result, Tensor};
 use candle_nn::{Linear, LayerNorm, Conv1d, Module};

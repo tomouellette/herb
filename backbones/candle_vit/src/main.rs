@@ -1,10 +1,7 @@
-use std::string::String;
-use std::collections::HashMap;
-
 use candle_core::utils::{cuda_is_available, metal_is_available};
 use candle_core::{DType, Device, Result, Tensor, IndexOp};
-use candle_nn::{Linear, LayerNorm, Conv1d, Module};
-use candle_nn::{linear, linear_no_bias, layer_norm, conv1d, VarBuilder, Init};
+use candle_nn::{Linear, LayerNorm, Module};
+use candle_nn::{linear, linear_no_bias, layer_norm, VarBuilder, Init};
 use candle_nn::ops::softmax;
 
 #[derive(Debug)]

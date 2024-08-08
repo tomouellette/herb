@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from torch import Tensor
 from typing import Union
+from collections import OrderedDict
 
 
 class ViT(nn.Module):
@@ -115,6 +116,16 @@ class ViT(nn.Module):
         self.pool = pool
         self.head = nn.Linear(dim, n_classes)
 
+        self.image_height = image_height
+        self.image_width = image_width
+        self.in_chans = channels
+        self.depth = depth
+        self.dim = dim
+        self.heads = heads
+        self.mlp_dim = mlp_dim
+        self.dim_head = dim_head
+        self.n_registers = n_registers
+
     def forward_embed(self, x: Tensor):
         b, c, h, w = x.shape
         p1, p2 = self.patch_height, self.patch_width
@@ -148,6 +159,43 @@ class ViT(nn.Module):
         x = self.forward_embed(img)
         x = self.head(x)
         return x
+
+    def save(self, path: str, kind: str = None):
+        state_dict = {k: v.cpu() for k, v in self.state_dict().items()}
+        for k, v in [
+            ("image_height", self.image_height),
+            ("image_width", self.image_width),
+            ("in_chans", self.in_chans),
+            ("patch_height", self.patch_height),
+            ("patch_width", self.patch_width),
+            ("dim", self.dim),
+            ("depth", self.depth),
+            ("heads", self.heads),
+            ("mlp_dim", self.mlp_dim),
+            ("dim_head", self.dim_head),
+            ("n_registers", self.n_registers),
+        ]:
+            dtype = torch.int64
+            if isinstance(v, (list, tuple)):
+                state_dict[k] = torch.tensor(v, dtype=dtype)
+            else:
+                state_dict[k] = torch.tensor([v], dtype=dtype)
+
+        state_dict["mean_pool"] = torch.tensor(
+            [self.pool == "mean"], dtype=torch.int64
+        )
+
+        if kind == "torch" or path.endswith((".pth", ".pt")):
+            if not path.endswith(".pth"):
+                path = path + ".pth"
+
+            torch.save(self.state_dict(), path)
+        elif kind == "safetensors" or path.endswith(".safetensors"):
+            from safetensors.torch import save_file
+            if not path.endswith(".safetensors"):
+                path = path + ".safetensors"
+
+            save_file(state_dict, path)
 
 
 class Attention(nn.Module):
@@ -228,32 +276,37 @@ class Transformer(nn.Module):
         dropout: float = 0.
     ):
         super().__init__()
+        self.depth = depth
         self.norm = nn.LayerNorm(dim)
-        self.layers = nn.ModuleList([])
         for i in range(depth):
-            self.layers.append(nn.ModuleList([
+            self.add_module(
+                f"attention_{i}",
                 Attention(
                     dim,
                     heads=heads,
                     dim_head=dim_head,
                     dropout=dropout
-                ),
-                nn.Sequential(
-                    nn.LayerNorm(dim),
-                    nn.Linear(dim, mlp_dim),
-                    nn.GELU(),
-                    nn.Dropout(dropout),
-                    nn.Linear(mlp_dim, dim),
-                    nn.Dropout(dropout),
                 )
-            ]))
+            )
+
+            self.add_module(
+                f"feedforward_{i}",
+                nn.Sequential(OrderedDict([
+                    ("norm", nn.LayerNorm(dim)),
+                    ("linear1", nn.Linear(dim, mlp_dim)),
+                    ("gelu", nn.GELU()),
+                    ("dropout1", nn.Dropout(dropout)),
+                    ("linear2", nn.Linear(mlp_dim, dim)),
+                    ("dropout2", nn.Dropout(dropout)),
+                ]))
+            )
 
     def forward(self, x):
-        for attn, ff in self.layers:
-            x = attn(x) + x
-            x = ff(x) + x
+        for i in range(self.depth):
+            x = getattr(self, f"attention_{i}")(x) + x
+            x = getattr(self, f"feedforward_{i}")(x) + x
 
-        return x
+        return self.norm(x)
 
 
 def vit_nano(
@@ -418,6 +471,8 @@ if __name__ == "__main__":
     small = vit_small()
     base = vit_base()
     large = vit_large()
+
+    nano.save("backbones/candle_vit/vit.safetensors")
 
     def _n_parameters(model):
         model.head = nn.Identity()

@@ -1,0 +1,8 @@
+[package]
+name = "candle_vit"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+candle-core = { version = "0.6.0", features = ["metal"] }
+candle-nn = { version = "0.6.0", features = ["metal"] }

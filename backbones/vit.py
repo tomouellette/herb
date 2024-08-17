@@ -125,6 +125,7 @@ class ViT(nn.Module):
         self.mlp_dim = mlp_dim
         self.dim_head = dim_head
         self.n_registers = n_registers
+        self.n_patches = n_patches
 
     def forward_embed(self, x: Tensor):
         b, c, h, w = x.shape

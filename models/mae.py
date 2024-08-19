@@ -43,7 +43,7 @@ class MAE(nn.Module):
 
     def __init__(
         self,
-        backbone: nn.Module,
+        backbone: ViT,
         mask_ratio: float = 0.7,
         decoder_dim: int = 768,
         decoder_depth: int = 12,

@@ -328,7 +328,7 @@ def vit_nano(
         dim_head=196 // 2,
         dropout=0.,
         emb_dropout=0.,
-        n_registers=8,
+        n_registers=4,
     )
 
 
@@ -350,7 +350,7 @@ def vit_micro(
         dim_head=192 // 3,
         dropout=0.,
         emb_dropout=0.,
-        n_registers=8,
+        n_registers=4,
     )
 
 
@@ -372,7 +372,7 @@ def vit_tiny(
         dim_head=256 // 4,
         dropout=0.,
         emb_dropout=0.,
-        n_registers=8,
+        n_registers=6,
     )
 
 
@@ -394,7 +394,7 @@ def vit_small(
         dropout=0.,
         dim_head=384 // 6,
         emb_dropout=0.,
-        n_registers=8,
+        n_registers=6,
     )
 
 

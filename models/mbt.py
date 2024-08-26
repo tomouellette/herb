@@ -322,7 +322,7 @@ class MBTAugmentation:
         rotation: bool = True,
         hf_p: float = 0.5,
         vf_p: float = 0.5,
-        cj_p: float = 0.5,
+        cj_p: float = 0.2,
         cj_b: float = 0.4,
         cj_c: float = 0.4,
         cj_s: float = 0.2,
@@ -331,6 +331,9 @@ class MBTAugmentation:
         gb_p: float = 0.2,
         gb_k: int = 3,
         gb_s: Tuple[float, float] = (0.1, 2.0),
+        gn_p: float = 0.2,
+        gn_s: Tuple[float, float] = 0.03,
+        iv_p: float = 0.2,
     ):
         self.n_views = n_views
 
@@ -371,7 +374,17 @@ class MBTAugmentation:
                 T.GaussianBlur(gb_k, gb_s)
             ], p=gb_p))
 
-        self.augment.append(T.ToImage())
+        self.augment.append(T.ToImage(), T.ToDtype(torch.float32, scale=True))
+
+        if gn_p > 0.:
+            self.augment.append(T.RandomApply([
+                T.GaussianNoise(sigma=gn_s)
+            ], p=gn_p))
+
+        if iv_p > 0.:
+            self.augment.append(T.RandomApply([
+                T.Invert()
+            ], p=iv_p))
 
         if mode == "rgb":
             self.augment.append(T.RGB())
@@ -587,7 +600,7 @@ def main(args: argparse.Namespace):
         input_type = "tar"
 
         dataset = (
-            wds.WebDataset(args.image_folder, shardshuffle=True)
+            wds.WebDataset(args.input, shardshuffle=True)
             .shuffle(args.batch_size)
             .decode("pil")
             .to_tuple("tiff;png;jpeg;tif;jpg;webp")
@@ -595,7 +608,7 @@ def main(args: argparse.Namespace):
             .batched(args.batch_size)
         )
 
-        loader = wds.WebLoader(dataset, batch_size=None)
+        loader = wds.WebLoader(dataset, batch_size=None, shuffle=False)
         loader = loader.with_epoch(args.n_batches)
     else:
         raise FileNotFoundError(
@@ -653,7 +666,7 @@ def main(args: argparse.Namespace):
 
         model.train()
 
-        progress_bar = tqdm(loader)
+        progress_bar = tqdm(loader, total=args.n_batches)
         description = message(f"Epoch {epoch + 1}", prefix="LOOP", cout=False)
 
         running_loss = 0.

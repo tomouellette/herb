@@ -379,7 +379,10 @@ class MBTAugmentation:
                 T.GaussianBlur(gb_k, gb_s)
             ], p=gb_p))
 
-        self.augment.append(T.ToImage(), T.ToDtype(torch.float32, scale=True))
+        self.augment.extend([
+            T.ToImage(),
+            T.ToDtype(torch.float32, scale=True)
+        ])
 
         if gn_p > 0.:
             self.augment.append(T.RandomApply([

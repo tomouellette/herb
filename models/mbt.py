@@ -123,6 +123,11 @@ def parse_args():
         help="Number of epochs between checkpoints"
     )
 
+    parser.add_argument(
+        "--print_fraction", type=float, default=0.025,
+        help="Fraction of total iterations to print batch loss"
+    )
+
     return parser.parse_args()
 
 
@@ -671,7 +676,7 @@ def main(args: argparse.Namespace):
 
         running_loss = 0.
         with progress_bar as pb:
-            for views in pb:
+            for i, views in enumerate(pb):
                 pb.set_description(description)
 
                 if input_type == "tar":
@@ -690,6 +695,9 @@ def main(args: argparse.Namespace):
 
                 if device == "cuda":
                     torch.cuda.empty_cache()
+
+                if i % int(args.n_batches * args.print_fraction) == 0:
+                    message(f"Batch {i+1} loss: {loss.item()}")
 
         message(f"Epoch {epoch + 1} loss: {running_loss / args.n_batches}")
 

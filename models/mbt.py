@@ -580,6 +580,10 @@ def main(args: argparse.Namespace):
 
     message(f"Output initialized at {args.output}")
 
+    args.batch_size = args.batch_size // args.n_views
+    args.lr_max = args.lr_max * args.batch_size / 256
+    args.lr_min = args.lr_min * args.batch_size / 256
+
     transform = MBTAugmentation(
         args.image_size,
         n_views=args.n_views,

@@ -280,7 +280,7 @@ class MBT(nn.Module):
                     loss_mim += self.forward_loss((t[i].T @ t[j]) / b) / nc
                     loss_cls += self.forward_loss((c[i].T @ c[j]) / b) / nc
 
-        loss = loss_mim + loss_cls
+        loss = (loss_mim + loss_cls) / (2 * b)
 
         return loss
 
@@ -323,7 +323,7 @@ class MBTAugmentation:
         image_size: int,
         n_views: int = 4,
         mode: int = "rgb",
-        crop_scale: Tuple[float, float] = (0.95, 1.0),
+        crop_scale: Tuple[float, float] = (0.7, 1.0),
         rotation: bool = True,
         hf_p: float = 0.5,
         vf_p: float = 0.5,
@@ -335,10 +335,10 @@ class MBTAugmentation:
         gs_p: float = 0.2,
         gb_p: float = 0.2,
         gb_k: int = 3,
-        gb_s: Tuple[float, float] = (0.1, 2.0),
-        gn_p: float = 0.2,
+        gb_s: Tuple[float, float] = (0.1, 1.0),
+        gn_p: float = 0.0,
         gn_s: Tuple[float, float] = 0.03,
-        iv_p: float = 0.2,
+        iv_p: float = 0.0,
     ):
         self.n_views = n_views
 

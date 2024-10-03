@@ -43,7 +43,7 @@ model.save("mlp_mixer_small.safetensors") # safetensors format
 
 ## Models
 
-Models encompass general training or pre-training schemes for various tasks. Everything is setup for the single GPU setting but can be easily modified for multi-GPU. You can check that these models are working on your computing by running the following code.
+Models encompass general training or pre-training schemes for various tasks. Everything is setup for the single GPU setting but can be easily modified for multi-GPU. You can check that these models are working on your machine by running the following code.
 
 ```bash
 chmod +x models/test.sh

@@ -52,7 +52,7 @@ chmod +x models/test.sh
 
 ### DINO
 
-A trainable implementation of [distillation with no labels (DINO)](https://arxiv.org/abs/2104.14294).
+A trainable implementation of [distillation with no labels (DINO)](https://arxiv.org/abs/2104.14294). This can be trained on a folder full of arbitrarily sized images.
 
 ```bash
 python3 -m models.dino \

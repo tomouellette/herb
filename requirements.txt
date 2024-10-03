@@ -3,10 +3,10 @@
 torch
 torchvision
 huggingface
+webdataset
 
 # Packages for testing
 
 numpy
 scikit-learn
 matplotlib
-

@@ -4,13 +4,14 @@ A rough collection of personal scripts, utilities, and implementations for exper
 
 ## Setup
 
-Only `torch`, `torchvision`, and `webdataset` are required for running models and scripts. Additional dependencies are used for optional tests (see `requirements.txt`).
+It's assumed you have `python3` and `pip` installed. You can set up the required dependencies as shown below.
 
 ```bash
+git clone https://github.com/tomouellette/herb
 python3 -m pip install -r requirements.txt
 ```
 
-By default, all I/O for various models are handled through the basic pytorch `ImageFolder` dataset. If you want faster I/O that works across shards, you can replace these blocks with a `webdataset` dataset.
+By default, all I/O for various models is handled through a basic `FolderDataset`. If you want faster I/O that works across shards, you can replace these blocks with a `webdataset` dataset if you'd like.
 
 ## Backbones
 
@@ -42,7 +43,16 @@ model.save("mlp_mixer_small.safetensors") # safetensors format
 
 ## Models
 
+Models encompass general training or pre-training schemes for various tasks. Everything is setup for the single GPU setting but can be easily modified for multi-GPU. You can check that these models are working on your computing by running the following code.
+
+```bash
+chmod +x models/test.sh
+./models/test.sh
+```
+
 ### DINO
+
+A trainable implementation of [distillation with no labels (DINO)](https://arxiv.org/abs/2104.14294).
 
 ```python3
 # Run test training on MNIST (~96.5% linear probe accuracy)
@@ -77,6 +87,59 @@ python3 -m models.dino \
     --t_teacher_warmup_fraction 0.1 \
     --t_student 0.1 \
     --silent False
+```
+
+### Masked Autoencoder (MAE)
+
+A trainable implementation of [masked autoencoder](https://arxiv.org/abs/2111.06377).
+
+```bash
+python3 -m models.mae \
+    --input images/ \
+    --output logs/ \
+    --backbone vit_small \
+    --image_size 224 \
+    --channels 3 \
+    --patch_size 16 \
+    --mask_ratio 0.7 \
+    --batch_size 256 \
+    --num_workers 4 \
+    --n_batches 1000 \
+    --epochs 512 \
+    --lr_min 1e-6 \
+    --lr_max 0.001 \
+    --weight_decay 1e-6 \
+    --lr_warmup 0.1 \
+    --n_checkpoint 10 \
+    --print_fraction 0.025
+```
+
+### Masked Barlow Twins (MBT)
+
+A custom variant of [barlow twins](https://arxiv.org/pdf/2103.03230) with additional token masking and attention pooling of embedded views using a `ViT` backbone.
+
+```bash
+python3 -m models.mbt \
+    --input images/ \
+    --output logs/ \
+    --backbone vit_small \
+    --image_size 224 \
+    --channels 3 \
+    --patch_size 16 \
+    --mask_ratio_min 0.3 \
+    --mask_ratio_max 0.3 \
+    --rr_lambda 0.0051 \
+    --projector_dims 512 512 2048 \
+    --n_views 2 \
+    --batch_size 64 \
+    --num_workers 4 \
+    --epochs 512 \
+    --lr_min 1e-6 \
+    --lr_max 0.001 \
+    --weight_decay 1e-6 \
+    --lr_warmup 0.1 \
+    --n_checkpoint 10 \
+    --print_fraction 0.025
 ```
 
 ## Inference

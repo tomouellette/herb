@@ -300,7 +300,7 @@ fn main() {
     let x = Tensor::rand(0.0_f32, 1.0_f32, &[1, 3, 224, 224], &device).unwrap();
     let x = x.to_dtype(candle_core::DType::F32).unwrap();
     let model = ConvNeXtv2::load("convnext.safetensors", &device).unwrap();
-    // print weights in convnextlayernorm after loading
+
     println!("ConvNeXtv2: {:?}", model.downsample_norm[0].weight.to_vec1::<f32>().unwrap());
     let output = model.forward(&x).unwrap();
 

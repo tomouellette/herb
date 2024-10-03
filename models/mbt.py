@@ -9,7 +9,6 @@ import torch.nn as nn
 import webdataset as wds
 import torchvision.transforms.v2 as T
 
-from tqdm import tqdm
 from PIL import Image
 from typing import Tuple
 from torch import Tensor
@@ -74,7 +73,7 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--n_views", type=int, default=6,
+        "--n_views", type=int, default=2,
         help="Number of views per image"
     )
 
@@ -149,13 +148,11 @@ class MBT(nn.Module):
     ----------
     1. J. Zbontar, L. Jing, I. Misra, Y. LeCun, S. Deny. "Barlow Twins:
        Self-Supervised Learning via Redundancy Reduction". ICML 2021.
-    2. This repository: this is the first implementation of an iBOT-like
-       latent correlation based self-supervised learning method.
 
     Notes
     -----
-    This is an extension of Barlow Twins to include token masking and
-    swapped class token prediction in the essence of iBOT.
+    This model is an extension of Barlow Twins to include token masking and
+    swapped class token prediction
     """
 
     def __init__(
@@ -292,8 +289,14 @@ class MBTAugmentation:
     ----------
     image_size : int
         Image height/width
+    n_views : int
+        Number of views per image
+    mode : str
+        Image mode (rgb or gray)
     crop_scale : Tuple[float, float]
         Min/max scale of random resized crop
+    rotation : bool
+        Apply random rotation
     hf_p : float
         Probability of random horizontal flip
     vf_p : float
@@ -582,7 +585,7 @@ def main(args: argparse.Namespace):
 
     args.lr_max = args.lr_max * args.batch_size / 256
     args.lr_min = args.lr_min * args.batch_size / 256
-    args.batch_size = args.batch_size // args.n_views
+    args.batch_size = max(args.batch_size // args.n_views, 1)
 
     transform = MBTAugmentation(
         args.image_size,
@@ -678,33 +681,29 @@ def main(args: argparse.Namespace):
 
         model.train()
 
-        progress_bar = tqdm(loader, total=args.n_batches)
-        description = message(f"Epoch {epoch + 1}", prefix="LOOP", cout=False)
-
         running_loss = 0.
-        with progress_bar as pb:
-            for i, views in enumerate(pb):
-                pb.set_description(description)
+        for i, views in enumerate(loader):
+            if input_type == "tar":
+                views = views[0]
 
-                if input_type == "tar":
-                    views = views[0]
+            loss = model(views.to(device))
 
-                loss = model(views.to(device))
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
 
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                scheduler.step()
+            running_loss += loss.item()
 
-                pb.set_postfix({"Loss": loss.item()})
+            if device == "cuda":
+                torch.cuda.empty_cache()
 
-                running_loss += loss.item()
-
-                if device == "cuda":
-                    torch.cuda.empty_cache()
-
+            if args.print_fraction > 0:
                 if i % int(args.n_batches * args.print_fraction) == 0:
-                    message(f"Batch {i+1} loss: {loss.item()}")
+                    message(f"Batch {i+1} loss: {loss.item()}", prefix="LOOP")
+
+            if i >= args.n_batches:
+                break
 
         message(f"Epoch {epoch + 1} loss: {running_loss / args.n_batches}")
 

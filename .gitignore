@@ -10,7 +10,6 @@ __pycache__/
 *$py.class
 
 # Miscellaneous
-data/
 docs/
 .DS_Store
 **/.DS_Store

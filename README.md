@@ -144,7 +144,7 @@ python3 -m models.mbt \
 
 ## Inference
 
-A variety of backbones also have matching implementations written in Rust using the `candle` library. Any backbone trained in pytorch and saved as a safetensor can be loaded and run in Rust. You'll need to modify the code for your downstream application. Here's some example backbones, assuming you have `cargo` installed.
+For a variety of backbones, I've also written matching implementations in Rust using the `candle` library. Any backbone trained in pytorch and saved as a safetensor can be loaded and run in Rust. You can paste/modify the code into your project as needed. Here's some example backbones, assuming you have `cargo` installed.
 
 ### ConvNext
 

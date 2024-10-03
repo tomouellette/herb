@@ -116,7 +116,7 @@ python3 -m models.mae \
 
 ### Masked Barlow Twins (MBT)
 
-A custom variant of [barlow twins](https://arxiv.org/pdf/2103.03230) with additional token masking and attention pooling of embedded views using a `ViT` backbone.
+A custom variant of [barlow twins](https://arxiv.org/pdf/2103.03230) with additional token masking and attention pooling of embedded views.
 
 ```bash
 python3 -m models.mbt \

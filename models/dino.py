@@ -1,82 +1,170 @@
-import copy
+import os
 import math
+import copy
 import torch
-import argparse
-import warnings
 import datetime
+import warnings
+import argparse
 import torch.nn as nn
+import webdataset as wds
 import torch.nn.functional as F
+import torchvision.transforms.v2 as T
 
 from PIL import Image
 from torch import Tensor
-from torchvision import datasets
-from torch.utils.data import DataLoader
-from torchvision import transforms as T
-from torch.optim.lr_scheduler import _LRScheduler
 from typing import Tuple, List
-
-from accelerate import Accelerator
-from accelerate.utils import tqdm
+from torch.optim.lr_scheduler import _LRScheduler
+from torch.utils.data import DataLoader, Dataset
 
 from backbones.zoo import select_backbone
 
 
-# -----------------------------------------------------------------------------
-#                                   Comments
-# -----------------------------------------------------------------------------
+def parse_args():
+    parser = argparse.ArgumentParser("Distillation with no labels")
 
+    parser.add_argument(
+        "--input", type=str,
+        help="Path to image folder"
+    )
 
-# This is a custom DINO implementation that differs a tad from original paper:
-#
-# - Augmentation:
-#   - Original paper does 2 global crops and N local crops on input image
-#     and exposes teacher to only global crops and student to local crops
-#     under the pretense that learning local-to-global correspondence is
-#     a good pretext task for vision
-#   - This implementation simply does N even random augmentations on an
-#     an input image and then just splits the augments evenly across the
-#     teacher and student networks; this actually simplifies the forward
-#     pass since views can just be resized and chunked into tensor input;
-#     plus it's not entirely clear how much augmentation is actually needed
-#     for performant self-supervised pre-training with joint embedding models
-#     (see https://arxiv.org/abs/2406.09294 for example)
-#
-# - Scheduling:
-#   - Original paper performs cosine scheduling on the learning rate
-#     and weight decay of the optimizer during training, and cosine
-#     scheduling on the momentum of the teacher network
-#   - This implementation only does cosine scheduling on the learning rate
-#     and fixes the weight decay to a constant value; the momentum on the
-#     teacher network is annealed to 1 using a linear schedule
-#
-# - Training:
-#   - Original paper clips gradients and freezes the projector on the N epochs
-#     and then unfreezes it on N + 1 epoch
-#   - This implementation doesn't freeze the projector on the first epoch and
-#     doesn't clip gradients in the student network during training; I haven't
-#     found too much instability with this implementation but if I do I'll add
-#     gradient clipping and projector freezing
-#
-#
-# Papers/resources that have been useful for building this DINO implementation:
-#
-# - "Emerging Properties in Self-Supervised Vision Transformers"
-#   Caron et al. (2021). https://arxiv.org/abs/2104.14294
-# - "You Don't Need Data-Augmentation in Self-Supervised Learning"
-#   Moutkanni et al. (2024). https://arxiv.org/abs/2406.09294
-# - The original DINO implementation:
-#   https://github.com/facebookresearch/dino/
-# - Lucidrains DINO implementation:
-#   https://github.com/lucidrains/vit-pytorch/blob/main/vit_pytorch/dino.py
-#
-# Test usage:
-#
-# - From herb root: python3 -m models.dino --test True --epochs 1
-#
+    parser.add_argument(
+        "--output", type=str,
+        help="Path to output folder"
+    )
 
-# -----------------------------------------------------------------------------
-#                                   Modules
-# -----------------------------------------------------------------------------
+    parser.add_argument(
+        "--image_size", type=int, default=64,
+        help="Image size"
+    )
+
+    parser.add_argument(
+        "--channels", type=int, default=3,
+        help="Number of channels"
+    )
+
+    parser.add_argument(
+        "--backbone", type=str, default="vit_small",
+        help="Backbone model"
+    )
+
+    parser.add_argument(
+        "--patch_size", type=int, default=16,
+        help="Patch size if backbone is vision transformer"
+    )
+
+    parser.add_argument(
+        "--projector_hidden_dim", type=int, default=256,
+        help="Hidden dimension of the projector"
+    )
+
+    parser.add_argument(
+        "--projector_k", type=int, default=256,
+        help="Output dimension of the projectors (i.e. prototype count)"
+    )
+
+    parser.add_argument(
+        "--projector_layers", type=int, default=4,
+        help="Number of layers in the projectors"
+    )
+
+    parser.add_argument(
+        "--projector_batch_norm", type=bool, default=False,
+        help="Use batch normalization in the projectors"
+    )
+
+    parser.add_argument(
+        "--projector_l2_norm", type=bool, default=False,
+        help="Use L2 normalization in the projectors"
+    )
+
+    parser.add_argument(
+        "--momentum_center", type=float, default=0.9,
+        help="Momentum for center EMA update"
+    )
+
+    parser.add_argument(
+        "--momentum_teacher", type=float, default=0.996,
+        help="Momentum for teacher EMA update"
+    )
+
+    parser.add_argument(
+        "--global_crops_scale", type=float, default=(0.5, 1.0),
+        help="Global crop scales",
+        nargs="+"
+    )
+
+    parser.add_argument(
+        "--local_crops_scale", type=float, default=(0.3, 0.7),
+        help="Local crop scales",
+        nargs="+"
+    )
+
+    parser.add_argument(
+        "--n_views", type=int, default=4,
+        help="Number of augmentations per image (must be even number)"
+    )
+
+    parser.add_argument(
+        "--t_student", type=float, default=0.1,
+        help="Temperature of student network"
+    )
+
+    parser.add_argument(
+        "--t_teacher", type=float, default=0.04,
+        help="Temperature of teacher network"
+    )
+
+    parser.add_argument(
+        "--epochs", type=int, default=2,
+        help="Number of epochs"
+    )
+
+    parser.add_argument(
+        "--batch_size", type=int, default=256,
+        help="Batch size"
+    )
+
+    parser.add_argument(
+        "--num_workers", type=int, default=4,
+        help="Number of workers for data loader"
+    )
+
+    parser.add_argument(
+        "--n_batches", type=int, default=1000,
+        help="Number of batches per epoch (only used if input is tar)"
+    )
+
+    parser.add_argument(
+        "--lr_max", type=float, default=1e-4,
+        help="Maximum learning rate"
+    )
+
+    parser.add_argument(
+        "--lr_min", type=float, default=1e-6,
+        help="Minimum learning rate"
+    )
+
+    parser.add_argument(
+        "--lr_warmup", type=float, default=0.1,
+        help="Fraction of total iterations to do linear warmup"
+    )
+
+    parser.add_argument(
+        '--weight_decay', type=float, default=0.05,
+        help="Weight decay for AdamW optimizer"
+    )
+
+    parser.add_argument(
+        "--n_checkpoint", type=int, default=None,
+        help="Number of epochs between checkpoints"
+    )
+
+    parser.add_argument(
+        "--print_fraction", type=float, default=0.025,
+        help="Fraction of total iterations to print batch loss"
+    )
+
+    return parser.parse_args()
 
 
 class Projector(nn.Module):
@@ -135,87 +223,7 @@ class Projector(nn.Module):
         return self.head(x)
 
 
-class Augmentation(object):
-    """A default augmentation pipeline for DINO
-
-    Parameters
-    ----------
-    image_size : int
-        Image size of data
-    global_crops_scale : tuple[float, float]
-        Scale for global crops
-    local_crops_scale : tuple[float, float]
-        Scale for local crops
-    n_augments : int
-        Even number of crops
-    """
-
-    def __init__(
-        self,
-        image_size: int,
-        channels: int,
-        global_crops_scale: tuple,
-        local_crops_scale: tuple,
-        n_augments: int
-    ):
-        if n_augments % 2 != 0:
-            raise ValueError("n_augments must be an even number")
-
-        self.n_augments = n_augments // 2
-
-        flip_and_color_jitter = T.Compose([
-            T.RandomHorizontalFlip(p=0.5),
-            T.RandomApply(
-                [T.ColorJitter(
-                    brightness=0.4,
-                    contrast=0.4,
-                    saturation=0.2, hue=0.1
-                )],
-                p=0.8
-            ),
-            T.RandomGrayscale(p=0.2),
-        ])
-
-        _normalize = ((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)) \
-            if channels == 3 else ((0.5,), (0.5,))
-
-        normalize = T.Compose([
-            T.ToTensor(),
-            T.Normalize(*_normalize)
-        ])
-
-        self.global_crops = T.Compose([
-            T.RandomResizedCrop(
-                image_size,
-                scale=global_crops_scale,
-                interpolation=Image.BICUBIC
-            ),
-            flip_and_color_jitter,
-            T.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0)),
-            normalize,
-        ])
-
-        self.local_crops = T.Compose([
-            T.RandomResizedCrop(
-                image_size,
-                scale=local_crops_scale,
-                interpolation=Image.BICUBIC
-            ),
-            flip_and_color_jitter,
-            T.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0)),
-            normalize,
-        ])
-
-    def __call__(self, image: Image) -> List[Tensor]:
-        crops = []
-        for _ in range(self.n_augments):
-            crops.append(self.global_crops(image))
-            crops.append(self.local_crops(image))
-
-        return torch.stack(crops)
-
-
-class StudentTeacher(nn.Module):
+class DINO(nn.Module):
     """A container for passing backbone embedding to linear projector
 
     Parameters
@@ -247,14 +255,17 @@ class StudentTeacher(nn.Module):
         projector_layers: int = 4,
         projector_batch_norm: bool = False,
         projector_l2_norm: bool = False,
-        momentum_center: float = 0.9
+        n_views: int = 5,
+        t_student: float = 0.1,
+        t_teacher: float = 0.04,
+        momentum_center: float = 0.9,
     ):
         super().__init__()
         x = torch.randn(1, *image_size)
         d = backbone(x).flatten(1).shape[-1]
 
-        self.student_encoder = backbone
-        self.student_projector = Projector(
+        self.se = backbone
+        self.sp = Projector(
             input_dim=d,
             projector_k=projector_k,
             projector_hidden_dim=projector_hidden_dim,
@@ -263,8 +274,8 @@ class StudentTeacher(nn.Module):
             l2_norm=projector_l2_norm
         )
 
-        self.teacher_encoder = copy.deepcopy(self.student_encoder)
-        self.teacher_projector = Projector(
+        self.te = copy.deepcopy(self.se)
+        self.tp = Projector(
             input_dim=d,
             projector_k=projector_k,
             projector_hidden_dim=projector_hidden_dim,
@@ -273,28 +284,18 @@ class StudentTeacher(nn.Module):
             l2_norm=False
         )
 
-        for p in self.teacher_encoder.parameters():
+        for p in self.te.parameters():
             p.requires_grad_(False)
 
-        for p in self.teacher_projector.parameters():
+        for p in self.tp.parameters():
             p.requires_grad_(False)
+
+        self.n_views = n_views
+        self.t_student = t_student
+        self.t_teacher = t_teacher
 
         self.momentum_center = momentum_center
         self.register_buffer("center", torch.zeros(1, projector_k))
-
-    @torch.no_grad()
-    def update_ema(self, momentum: float):
-        for pt, ps in zip(
-            self.teacher_encoder.parameters(),
-            self.student_encoder.parameters()
-        ):
-            pt.data = pt.data * momentum + ps.data * (1 - momentum)
-
-        for pt, ps in zip(
-            self.teacher_projector.parameters(),
-            self.student_projector.parameters()
-        ):
-            pt.data = pt.data * momentum + ps.data * (1 - momentum)
 
     @torch.no_grad()
     def update_centers(self, teacher_output: Tensor):
@@ -303,85 +304,131 @@ class StudentTeacher(nn.Module):
             teacher_output.mean(dim=0) * (1 - self.momentum_center)
         return self.center
 
-    def forward(self, images: Tensor) -> Tensor:
-        batch, n_augments, c, h, w = images.shape
-        n_pairs = n_augments // 2
+    @torch.no_grad()
+    def update_ema(self, momentum: float):
+        for t, s in zip(
+            self.tp.parameters(),
+            self.sp.parameters()
+        ):
+            t.data = t.data * momentum + s.data * (1 - momentum)
 
-        vs = images[:, :n_pairs]
-        vs = vs.reshape(batch * n_pairs, c, h, w)
-        vs = self.student_encoder(vs)
-        vs = self.student_projector(vs)
-
+    def forward(self, batch: Tensor, device: str) -> Tensor:
         with torch.no_grad():
-            vt = images[:, n_pairs:]
-            vt = vt.reshape(batch * n_pairs, c, h, w)
-            vt = self.teacher_encoder(vt)
-            vt = self.teacher_projector(vt)
+            vt = [self.tp(self.te(i[0].to(device))) for i in batch]
+            vt = torch.vstack(vt).detach()
 
-        centers = self.update_centers(vt)
+        vs = [self.sp(self.se(i[1].to(device))) for i in batch]
+        vs = torch.vstack(vs)
 
-        return vs, vt, centers
+        s_chunk = vs.shape[0] // (self.n_views + 1)
+        t_chunk = vt.shape[0] // 2
+
+        pt = vt - self.center
+        pt /= self.t_teacher
+        pt = pt.softmax(dim=-1)
+
+        ps = vs / self.t_student
+        ps = F.log_softmax(ps + 1e-20, dim=-1)
+
+        pt = pt.chunk(t_chunk)
+        ps = ps.chunk(s_chunk)
+
+        loss, count = 0.0, 0
+        for s, t in zip(ps, pt):
+            for i in range(2):
+                for j in range(self.n_views):
+                    loss += (-t[i] * s[j]).sum(dim=-1).mean()
+                    count += 1
+
+        loss /= count
+
+        self.center = self.update_centers(vt)
+
+        return loss
 
 
-class StudentTeacherLoss(nn.Module):
-    """A loss function for student-teacher training
+class DINOAugmentation(object):
+    """A default augmentation pipeline for DINO
 
     Parameters
     ----------
-    epochs : int
-        Number of epochs
-    projector_k : int
-        Output dimension of the projector (i.e. prototype count)
-    t_teacher_start : float
-        Initial temperature of teacher network
-    t_teacher_end : float
-        Final temperature of teacher network
-    t_teacher_warmup_fraction : int
-        Fraction of total iterations to do linear warmup
-    t_student : float
-        Temperature of student network
+    image_size : int
+        Image size of data
+    global_crops_scale : tuple[float, float]
+        Scale for global crops
+    local_crops_scale : tuple[float, float]
+        Scale for local crops
+    n_views : int
+        Number of local crops
     """
 
     def __init__(
         self,
-        epochs: int,
-        projector_k: int,
-        t_teacher_start: float = 0.04,
-        t_teacher_end: float = 0.02,
-        t_teacher_warmup_fraction: int = 0.1,
-        t_student: float = 0.1,
+        image_size: int,
+        channels: int,
+        global_crops_scale: tuple = (0.5, 1.0),
+        local_crops_scale: tuple = (0.1, 0.8),
+        n_views: int = 6
     ):
-        super().__init__()
-        t_teacher_warmup = int(epochs * t_teacher_warmup_fraction)
+        if n_views % 2 != 0:
+            raise ValueError("n_views must be an even number")
 
-        self.anneal_t_teacher = [
-            t_teacher_start
-            + (t_teacher_end - t_teacher_start)
-            * i / t_teacher_warmup
-            for i in range(t_teacher_warmup)
-        ] + [t_teacher_end] * (epochs - t_teacher_warmup + 1)
+        self.n_views = n_views
 
-        self.t_student = t_student
+        flip_and_color_jitter = T.Compose([
+            T.RandomHorizontalFlip(p=0.5),
+            T.RandomApply(
+                [T.ColorJitter(
+                    brightness=0.4,
+                    contrast=0.4,
+                    saturation=0.2, hue=0.1
+                )],
+                p=0.8
+            ),
+            T.RandomGrayscale(p=0.2),
+        ])
 
-    def forward(
-        self,
-        student_output: Tensor,
-        teacher_output: Tensor,
-        centers: Tensor,
-        epoch: int,
-        eps: float = 1e-20
-    ) -> Tensor:
-        p_teacher = teacher_output.detach()
-        p_teacher = p_teacher - centers
-        p_teacher /= self.anneal_t_teacher[epoch]
-        p_teacher = p_teacher.softmax(dim=-1)
+        _normalize = ((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)) \
+            if channels == 3 else ((0.5,), (0.5,))
 
-        p_student = student_output / self.t_student
-        p_student = F.log_softmax(p_student + eps, dim=-1)
+        normalize = T.Compose([
+            T.ToImage(),
+            T.ToDtype(torch.float32, scale=True),
+            T.Normalize(*_normalize)
+        ])
 
-        loss = - (p_teacher * p_student).sum(dim=-1).mean()
+        self.global_crops = T.Compose([
+            T.RandomResizedCrop(
+                image_size,
+                scale=global_crops_scale,
+                interpolation=Image.BICUBIC
+            ),
+            flip_and_color_jitter,
+            T.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0)),
+            normalize,
+        ])
 
-        return loss
+        self.local_crops = T.Compose([
+            T.RandomResizedCrop(
+                image_size,
+                scale=local_crops_scale,
+                interpolation=Image.BICUBIC
+            ),
+            flip_and_color_jitter,
+            T.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0)),
+            normalize,
+        ])
+
+    def __call__(self, image: Image) -> Tensor:
+        global_crops = []
+        for _ in range(2):
+            global_crops.append(self.global_crops(image))
+
+        crops = []
+        for _ in range(self.n_views):
+            crops.append(self.local_crops(image))
+
+        return torch.stack(global_crops), torch.stack(crops)
 
 
 class CosineDecay(_LRScheduler):
@@ -472,9 +519,44 @@ class CosineDecay(_LRScheduler):
 
         self._last_lr = [group['lr'] for group in self.optimizer.param_groups]
 
-# -----------------------------------------------------------------------------
-#                                   Functions
-# -----------------------------------------------------------------------------
+
+class FolderDataset(Dataset):
+    """Load images from a folder
+
+    Parameters
+    ----------
+    path : str
+        Path to image folder
+    transform : object
+        Image transformation
+    extensions : str
+        Valid image file extensions separated by semicolon
+    """
+
+    def __init__(
+        self,
+        path: str,
+        transform: object = None,
+        extensions: str = "tif;tiff;jpg;jpeg;png;webp",
+    ):
+        valid_extensions = extensions.split(";")
+        paths = os.listdir(path)
+
+        self.image_paths = [
+            os.path.join(path, p) for p in paths
+            if p.split(".")[-1] in valid_extensions
+        ]
+
+        self.transform = transform
+
+    def __getitem__(self, index):
+        image = Image.open(self.image_paths[index])
+        if self.transform is not None:
+            image = self.transform(image)
+        return image
+
+    def __len__(self):
+        return len(self.image_paths)
 
 
 def message(output: str, cout: bool = True) -> None:
@@ -498,346 +580,90 @@ def momentum_schedule(
     )
 
 
-# -----------------------------------------------------------------------------
-#                                   Testing
-# -----------------------------------------------------------------------------
-
-
-def test_mnist(image_size: int, batch_size: int = 64, transform=None):
-    """Load MNIST data"""
-    import os
-    import ssl
-    import shutil
-    import numpy as np
-    from torchvision.datasets import MNIST
-    from sklearn.manifold import TSNE
-    from torch.utils.data import DataLoader
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.metrics import accuracy_score
-    from sklearn.decomposition import PCA
-    import matplotlib.pyplot as plt
-
-    test_transform = T.Compose([
-        T.Resize(image_size),
-        T.ToTensor(),
-        T.Normalize((0.5,), (0.5,))
-    ])
-
-    if os.path.exists("tests/dino/"):
-        shutil.rmtree("tests/dino/")
-
-    os.makedirs("tests/dino/")
-
-    ssl._create_default_https_context = ssl._create_unverified_context
-
-    train = MNIST(
-        root="data", train=True, download=True, transform=transform
-    )
-
-    test = MNIST(
-        root="data", train=False, download=True, transform=test_transform
-    )
-
-    train_loader, test_loader = (
-        DataLoader(train, batch_size=batch_size, shuffle=True),
-        DataLoader(test, batch_size=batch_size, shuffle=False),
-    )
-
-    @torch.no_grad()
-    def evaluation_function(
-        student_teacher,
-        test_loader,
-        epoch,
-        device,
-        finalize: bool = False,
-    ):
-        GIF = bool(os.getenv('GIF', 0))
-
-        if GIF and finalize:
-            import imageio
-
-        student_teacher.eval()
-        tz, sz, y = [], [], []
-        with tqdm(test_loader) as progress:
-            description = message(f"Epoch {epoch} | Testing", cout=False)
-            description = description.replace("INFO", "TEST")
-            for xi, yi in progress:
-                progress.set_description(description)
-                tzi = student_teacher.teacher_encoder(xi.to(device))
-                szi = student_teacher.student_encoder(xi.to(device))
-                tzi = tzi.flatten(1)
-                szi = szi.flatten(1)
-                tz.append(tzi.detach().cpu().numpy())
-                sz.append(szi.detach().cpu().numpy())
-                y.append(yi.numpy())
-
-        tz = np.concatenate(tz, axis=0)
-        sz = np.concatenate(sz, axis=0)
-        y = np.concatenate(y, axis=0)
-
-        tz = (tz - tz.mean(axis=0)) / tz.std(axis=0)
-        sz = (sz - sz.mean(axis=0)) / sz.std(axis=0)
-
-        fig, ax = plt.subplots(1, 2, figsize=(5, 2))
-        tpca = PCA(n_components=2).fit_transform(tz)
-        spca = PCA(n_components=2).fit_transform(sz)
-        ax[0].scatter(*tpca.T, c=y, cmap="tab10", alpha=0.5, s=1.5)
-        ax[1].scatter(*spca.T, c=y, cmap="tab10", alpha=0.5, s=1.5)
-        ax[0].set_title("Teacher PCA")
-        ax[1].set_title("Student PCA")
-        ax[0].axis("off")
-        ax[1].axis("off")
-        fig.tight_layout()
-        plt.savefig(f"tests/dino/pca_{epoch}.png")
-        plt.close()
-
-        np.random.seed(123456)
-        for z, name in zip([tz, sz], ["teacher", "student"]):
-            logreg = LogisticRegression(max_iter=1000)
-            idx = np.random.choice(
-                z.shape[0],
-                size=int(0.5 * z.shape[0]),
-                replace=False
-            )
-
-            x_train = z[idx]
-            y_train = y[idx]
-            x_test = z[~idx]
-            y_test = y[~idx]
-
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                logreg.fit(x_train, y_train)
-
-            y_pred = logreg.predict(x_test)
-            acc = accuracy_score(y_test, y_pred)
-            message(f"Epoch {epoch} {name} | Accuracy: {acc}")
-
-        if finalize:
-            if GIF:
-                images = []
-                plot_dir = "tests/dino/"
-                for i in range(0, epoch):
-                    filename = os.path.join(plot_dir, f'pca_{i}.png')
-                    images.append(imageio.v3.imread(filename))
-
-                for _ in range(20):
-                    images.append(imageio.v3.imread(filename))
-
-                imageio.v3.imwrite(
-                    os.path.join(plot_dir, 'training.gif'),
-                    images,
-                    loop=1000
-                )
-
-            ttsne = TSNE(n_components=2, n_jobs=-1).fit_transform(tz)
-            stsne = TSNE(n_components=2, n_jobs=-1).fit_transform(sz)
-
-            fig, ax = plt.subplots(1, 2, figsize=(5, 2))
-            ax[0].scatter(*ttsne.T, c=y, cmap="tab10", alpha=0.5, s=1.5)
-            ax[1].scatter(*stsne.T, c=y, cmap="tab10", alpha=0.5, s=1.5)
-            ax[0].set_title("Teacher")
-            ax[1].set_title("Student")
-            ax[0].axis("off")
-            ax[1].axis("off")
-            fig.tight_layout()
-            plt.savefig(f"tests/dino/tsne_{epoch}.png")
-            plt.close()
-
-    return train_loader, test_loader, evaluation_function
-
-
-# -----------------------------------------------------------------------------
-#                                   Training
-# -----------------------------------------------------------------------------
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(
-        "Self-supervised learning with distillation with no labels"
-    )
-
-    parser.add_argument(
-        "--image_folder", type=str,
-        help="Path to image folder"
-    )
-
-    parser.add_argument(
-        "--image_size", type=int, default=64,
-        help="Image size"
-    )
-
-    parser.add_argument(
-        "--channels", type=int, default=3,
-        help="Number of channels"
-    )
-
-    parser.add_argument(
-        "--backbone", type=str, default="mlp_mixer_small",
-        help="Backbone model"
-    )
-
-    parser.add_argument(
-        "--epochs", type=int, default=2,
-        help="Number of epochs"
-    )
-
-    parser.add_argument(
-        "--batch_size", type=int, default=256,
-        help="Batch size"
-    )
-
-    parser.add_argument(
-        "--max_lr", type=float, default=1e-4,
-        help="Maximum learning rate"
-    )
-
-    parser.add_argument(
-        "--min_lr", type=float, default=1e-6,
-        help="Minimum learning rate"
-    )
-
-    parser.add_argument(
-        "--lr_warmup_fraction", type=float, default=0.1,
-        help="Fraction of total iterations to do linear warmup"
-    )
-
-    parser.add_argument(
-        '--weight_decay', type=float, default=0.05,
-    )
-
-    parser.add_argument(
-        "--projector_hidden_dim", type=int, default=256,
-        help="Hidden dimension of the projector"
-    )
-
-    parser.add_argument(
-        "--projector_k", type=int, default=256,
-        help="Output dimension of the projectors (i.e. prototype count)"
-    )
-
-    parser.add_argument(
-        "--projector_layers", type=int, default=4,
-        help="Number of layers in the projectors"
-    )
-
-    parser.add_argument(
-        "--projector_batch_norm", type=bool, default=False,
-        help="Use batch normalization in the projectors"
-    )
-
-    parser.add_argument(
-        "--projector_l2_norm", type=bool, default=False,
-        help="Use L2 normalization in the projectors"
-    )
-
-    parser.add_argument(
-        "--momentum_center", type=float, default=0.9,
-        help="Momentum for center EMA update"
-    )
-
-    parser.add_argument(
-        "--momentum_teacher", type=float, default=0.996,
-        help="Momentum for teacher EMA update"
-    )
-
-    parser.add_argument(
-        "--global_crops_scale", type=float, default=(0.5, 1.0),
-        help="Global crop scales",
-        nargs="+"
-    )
-
-    parser.add_argument(
-        "--local_crops_scale", type=float, default=(0.3, 0.7),
-        help="Local crop scales",
-        nargs="+"
-    )
-
-    parser.add_argument(
-        "--n_augments", type=int, default=4,
-        help="Number of augmentations per image (must be even number)"
-    )
-
-    parser.add_argument(
-        "--t_teacher_start", type=float, default=0.04,
-        help="Initial temperature of teacher network"
-    )
-
-    parser.add_argument(
-        "--t_teacher_end", type=float, default=0.02,
-        help="Final temperature of teacher network"
-    )
-
-    parser.add_argument(
-        "--t_teacher_warmup_fraction", type=float, default=0.1,
-        help="Fraction of total iterations for teacher temp. linear warmup"
-    )
-
-    parser.add_argument(
-        "--t_student", type=float, default=0.1,
-        help="Temperature of student network"
-    )
-
-    parser.add_argument(
-        "--silent", type=bool, default=False,
-        help="Disable the progress bar"
-    )
-
-    parser.add_argument(
-        "--test", type=bool, default=False,
-        help="Run test on MNIST"
-    )
-
-    return parser.parse_args()
-
-
 def main(args: argparse.Namespace):
-    if args.test:
-        args.image_size = 28
-        args.channels = 1
+    if args.output is not None:
+        if os.path.isfile(args.output):
+            raise ValueError("Output must be a directory")
 
-    transform = Augmentation(
+        date = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+        output = os.path.join(args.output, date + "_distill")
+        os.makedirs(output, exist_ok=True)
+
+    message(f"Output initialized at {args.output}")
+
+    args.lr_max = args.lr_max * args.batch_size / 256
+    args.lr_min = args.lr_min * args.batch_size / 256
+    args.batch_size = max(args.batch_size // args.n_views, 1)
+
+    transform = DINOAugmentation(
         args.image_size,
         args.channels,
         args.global_crops_scale,
         args.local_crops_scale,
-        args.n_augments
+        args.n_views
     )
 
-    if not args.test:
-        backbone = select_backbone(
-            model=args.backbone,
-            image_size=args.image_size,
-            channels=args.channels
-        )
+    message(f"Building data loader for {args.input}")
 
-        dataset = datasets.ImageFolder(
-            args.image_folder,
-            transform=transform
+    if os.path.isdir(args.input):
+        input_type = "folder"
+
+        dataset = FolderDataset(
+            args.input,
+            transform=transform,
         )
 
         loader = DataLoader(
             dataset,
             batch_size=args.batch_size,
-            shuffle=True
-        )
-    else:
-        backbone = select_backbone(
-            model="mlp_mixer_nano",
-            image_size=args.image_size,
-            channels=args.channels,
-            patch_size=7
+            shuffle=True,
+            num_workers=args.num_workers,
+            pin_memory=False,
         )
 
-        loader, test_loader, evaluation_function = test_mnist(
-            args.image_size,
-            args.batch_size,
-            transform=transform
+        args.n_batches = len(loader)
+    elif os.path.isfile(args.input) and ".tar" in args.input:
+        input_type = "tar"
+
+        dataset = (
+            wds.WebDataset(args.input, shardshuffle=True)
+            .shuffle(args.batch_size)
+            .decode("pil")
+            .to_tuple("tiff;png;jpeg;tif;jpg;webp")
+            .map_tuple(transform)
+            .batched(args.batch_size)
         )
+
+        loader = wds.WebLoader(dataset, batch_size=None, shuffle=False)
+        loader = loader.with_epoch(args.n_batches)
+    else:
+        raise FileNotFoundError(
+            f"Invalid input: {args.input}. Must be a folder or tar file."
+        )
+
+    device = "cpu"
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+
+    message(f"Initializing backbone {args.backbone}")
+
+    kwargs = {}
+    if "vit" in args.backbone:
+        kwargs["patch_size"] = args.patch_size
+
+    backbone = select_backbone(
+        args.backbone,
+        image_size=args.image_size,
+        channels=args.channels,
+        **kwargs
+    )
 
     backbone.head = nn.Identity()
 
-    model = StudentTeacher(
+    model = DINO(
         backbone,
         (args.channels, args.image_size, args.image_size),
         args.projector_hidden_dim,
@@ -845,93 +671,95 @@ def main(args: argparse.Namespace):
         args.projector_layers,
         args.projector_batch_norm,
         args.projector_l2_norm,
-        args.momentum_center
-    )
-
-    model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
+        args.n_views,
+        args.t_student,
+        args.t_teacher,
+        args.momentum_center,
+    ).to(device)
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
-        lr=args.max_lr,
-        weight_decay=args.weight_decay
+        lr=args.lr_max,
+        weight_decay=args.weight_decay,
     )
 
     scheduler = CosineDecay(
         optimizer,
-        args.min_lr,
-        args.lr_warmup_fraction,
-        iterations=len(loader) * args.epochs,
+        min_lr=args.lr_min,
+        fraction_warmup=args.lr_warmup,
+        iterations=args.epochs * args.n_batches,
     )
 
     ema_schedule = momentum_schedule(
         args.momentum_teacher,
         0.9999,
-        len(loader) * args.epochs
+        args.n_batches * args.epochs
     )
 
-    loss_function = StudentTeacherLoss(
-        args.epochs,
-        args.projector_k,
-        args.t_teacher_start,
-        args.t_teacher_end,
-        args.t_teacher_warmup_fraction,
-        args.t_student,
-    )
+    message(f"Starting MBT training on {device}")
 
-    accelerator = Accelerator()
-    dataloader, model, optimizer, scheduler = accelerator.prepare(
-        loader, model, optimizer, scheduler
-    )
-
-    device = accelerator.device
-
-    message(f"Training started on device: {device}")
+    logger = {"train": {"epoch": [], "loss": []}}
+    logger["parameters"] = vars(args)
 
     for epoch in range(args.epochs):
         if epoch > 0:
             print("")
 
-        message(f"Epoch {epoch+1}")
+        message(f"Epoch {epoch + 1}")
 
-        progress_bar = tqdm(
-            loader,
-            disable=not accelerator.is_local_main_process and args.silent
-        )
+        model.train()
 
-        description = message(f"Epoch {epoch+1}", cout=False)
-        description = description.replace("INFO", "LOOP")
+        running_loss = 0.
+        for i, views in enumerate(loader):
+            if input_type == "tar":
+                views = views[0]
 
-        with progress_bar as progress:
-            for images, *_ in progress:
-                progress.set_description(description)
+            loss = model(views, device=device)
 
-                images = images.to(device)
-                student_output, teacher_output, centers = model(images)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
 
-                loss = loss_function(
-                    student_output,
-                    teacher_output,
-                    centers,
-                    epoch
-                )
+            model.update_ema(next(ema_schedule))
 
-                accelerator.backward(loss)
-                optimizer.step()
-                scheduler.step()
-                optimizer.zero_grad()
+            running_loss += loss.item()
 
-                model.update_ema(next(ema_schedule))
+            if device == "cuda":
+                torch.cuda.empty_cache()
 
-                progress.set_postfix({"Loss": loss.item()})
+            if args.print_fraction > 0:
+                if i % int(args.n_batches * args.print_fraction) == 0:
+                    message(f"Batch {i+1} loss: {loss.item()}", prefix="LOOP")
 
-        if args.test:
-            evaluation_function(
-                model,
-                test_loader,
-                epoch,
-                device,
-                finalize=epoch == args.epochs - 1
-            )
+            if i >= args.n_batches:
+                break
+
+        message(f"Epoch {epoch + 1} loss: {running_loss / args.n_batches}")
+
+        logger["train"]["epoch"].append(epoch)
+        logger["train"]["loss"].append(running_loss / args.n_batches)
+
+        _epoch = f"Epoch {epoch+1}"
+        message(f"{_epoch} train loss: {running_loss / args.n_batches}")
+
+        del running_loss
+
+        if args.n_checkpoint is not None:
+            if (epoch + 1) % args.n_checkpoint == 0:
+                check = f"{output}/check_{epoch}"
+                torch.save(logger, f"{check}-logger.pt")
+                model.se.save(f"{check}-student.pth")
+                model.te.save(f"{check}-teacher.pth")
+                model.se.save(f"{check}-student.safetensors")
+                model.te.save(f"{check}-teacher.safetensors")
+
+    if args.output is not None:
+        torch.save(logger, f"{output}/logger.pt")
+        model.se.save(f"{output}/final_student.pth")
+        model.te.save(f"{output}/final_teacher.pth")
+        model.se.save(f"{output}/final_student.safetensors")
+        model.te.save(f"{output}/final_teacher.safetensors")
 
 
 if __name__ == "__main__":

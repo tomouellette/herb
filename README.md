@@ -54,48 +54,44 @@ chmod +x models/test.sh
 
 A trainable implementation of [distillation with no labels (DINO)](https://arxiv.org/abs/2104.14294).
 
-```python3
-# Run test training on MNIST (~96.5% linear probe accuracy)
-python3 -m models.dino --test True --epochs 10
-
-# Run test training on MNIST and generate a GIF of PCA'd embeddings
-GIF=1 python3 -m models.dino --test True --epochs 10
-
-# Run standard training
+```bash
 python3 -m models.dino \
-    --image_folder 'data' \
-    --image_size 28 \
-    --backbone 'mlp_mixer_small' \
-    --channels 1 \
-    --epochs 10 \
-    --batch_size 256 \
-    --max_lr 1e-4 \
-    --min_lr 1e-6 \
-    --lr_warmup_fraction 0.1 \
+    --input image_folder/ \
+    --output logs/ \
+    --image_size 224 \
+    --channels 3 \
+    --backbone vit_small \
     --projector_hidden_dim 256 \
     --projector_k 256 \
     --projector_layers 4 \
     --projector_batch_norm False \
-    --projector_l2_norm True \
+    --projector_l2_norm False \
     --momentum_center 0.9 \
     --momentum_teacher 0.996 \
     --global_crops_scale 0.5 1.0 \
     --local_crops_scale 0.3 0.7 \
-    --n_augments 4 \
-    --t_teacher_start 0.04 \
-    --t_teacher_end 0.02 \
-    --t_teacher_warmup_fraction 0.1 \
+    --n_views 6 \
     --t_student 0.1 \
-    --silent False
+    --t_teacher 0.04 \
+    --epochs 512 \
+    --batch_size 256 \
+    --num_workers 4 \
+    --n_batches 1000 \
+    --lr_max 1e-4 \
+    --lr_min 1e-6 \
+    --lr_warmup 0.1 \
+    --weight_decay 0.05 \
+    --n_checkpoint 10 \
+    --print_fraction 0.025
 ```
 
 ### Masked Autoencoder (MAE)
 
-A trainable implementation of [masked autoencoder](https://arxiv.org/abs/2111.06377).
+A trainable implementation of [masked autoencoder](https://arxiv.org/abs/2111.06377). This can be trained on a folder full of arbitrarily sized images.
 
 ```bash
 python3 -m models.mae \
-    --input images/ \
+    --input image_folder/ \
     --output logs/ \
     --backbone vit_small \
     --image_size 224 \
@@ -116,11 +112,11 @@ python3 -m models.mae \
 
 ### Masked Barlow Twins (MBT)
 
-A custom variant of [barlow twins](https://arxiv.org/pdf/2103.03230) with additional token masking and attention pooling of embedded views.
+A custom variant of [barlow twins](https://arxiv.org/pdf/2103.03230) with additional token masking and attention pooling of embedded views. This can be trained on a folder full of arbitrarily sized images.
 
 ```bash
 python3 -m models.mbt \
-    --input images/ \
+    --input image_folder/ \
     --output logs/ \
     --backbone vit_small \
     --image_size 224 \

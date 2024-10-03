@@ -1,6 +1,6 @@
 # :herb: herb
 
-A rough collection of personal scripts, utilities, and implementations for experimenting, building, and training neural networks. Backbones and models are all self-contained in single files for easy modification in downstream projects.
+A rough collection of personal minimalistic scripts, utilities, and implementations for experimenting, building, and training neural networks. Backbones and models are all self-contained in single files for easy modification or extension in more elaborate downstream projects.
 
 ## Setup
 

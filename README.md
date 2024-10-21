@@ -8,6 +8,7 @@ It's assumed you have `python3` and `pip` installed. You can set up the required
 
 ```bash
 git clone https://github.com/tomouellette/herb
+cd herb/
 python3 -m pip install -r requirements.txt
 ```
 

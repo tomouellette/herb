@@ -719,7 +719,7 @@ if __name__ == "__main__":
         end = time.time()
         mean = (end - start) / 10
         print(
-            f"{prefix} Inference for {name} is {mean:.3f} images/second (CPU)."
+            f"{prefix} Inference for {name} is {mean:.3f} seconds/image (CPU)."
         )
 
     runtime(nano, "nano")

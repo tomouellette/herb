@@ -293,8 +293,6 @@ if __name__ == "__main__":
     base = mlp_mixer_base()
     large = mlp_mixer_large()
 
-    nano.save("backbones/candle_mlp_mixer/mlp_mixer.safetensors")
-
     def _n_parameters(model):
         model.head = nn.Identity()
         return sum(p.numel() for p in model.parameters())
@@ -320,7 +318,7 @@ if __name__ == "__main__":
         end = time.time()
         mean = (end - start) / 10
         print(
-            f"{prefix} Inference for {name} is {mean:.3f} images/second (CPU)."
+            f"{prefix} Inference for {name} is {mean:.3f} seconds/image (CPU)."
         )
 
     runtime(nano, "nano")

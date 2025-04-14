@@ -559,12 +559,12 @@ class FolderDataset(Dataset):
         return len(self.image_paths)
 
 
-def message(output: str, cout: bool = True) -> None:
+def message(output: str, prefix: str = "INFO", cout: bool = True) -> None:
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    out = f"[INFO | herb | {timestamp} ] {output}"
+    out = f"[{prefix} | herb | {timestamp} ] {output}"
     if not cout:
         return out
-    print(out)
+    print(out, flush=True)
 
 
 def momentum_schedule(
